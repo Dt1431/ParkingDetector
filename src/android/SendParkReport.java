@@ -16,31 +16,18 @@ import java.net.URL;
 public class SendParkReport extends AsyncTask<Void, Void, Void> {
     LatLng loc;
     String time;
+    String userId;
     int activity;
     String curBT;
     boolean isVerified;
 
-    SendParkReport(Location location, int activity, String curBT, boolean isVerified){
+    SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId){
         this.loc = new LatLng(location.getLatitude(), location.getLongitude());
         this.time = "";
         this.curBT = curBT;
         this.activity = activity;
         this.isVerified = false;
-    }
-
-    SendParkReport(Location location, String curTimeString, int activity){
-        this.loc = new LatLng(location.getLatitude(), location.getLongitude());
-        this.time = curTimeString;
-        this.activity = activity;
-        this.curBT = "";
-        this.isVerified = false;
-    }
-    SendParkReport(LatLng location, int activity){
-        this.loc = location;
-        this.time = "";
-        this.curBT = "";
-        this.activity = activity;
-        this.isVerified = false;
+        this.userId = userId;
     }
 
     StringBuffer chaine = new StringBuffer("");
@@ -53,7 +40,7 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
         try {
             StringBuilder urlString = new StringBuilder();
             urlString.append("userId=");
-            urlString.append("99999999");
+            urlString.append(userId);
             urlString.append("&userLat=");
             urlString.append(loc.latitude);
             urlString.append("&userLng=");
