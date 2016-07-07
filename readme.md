@@ -28,9 +28,9 @@ Cordova Parking Detector Plugin
   | endpoint | string | The plugin will send (via post) parking and un-parking data to this URL.|
 
   ### Example:
-  `initPlugin(false, 2, "http://streetsmartdemo.cloudapp.net/newParkingActivity")`;
+  `initParkingDetectorPlugin(false, 2, "http://streetsmartdemo.cloudapp.net/newParkingActivity")`;
 
-  Creates a parking detector with no status messages, will prompt the user a maximum of two times, and will send data to http://streetsmartdemo.cloudapp.net/newParkingActivity.
+  Creates a parking detector with no status messages, will prompt the user a maximum of two times, and will send data to http://streetsmartdemo.cloudapp.net/newParkingActivity. This is the recommended implementation.
 
 
 
