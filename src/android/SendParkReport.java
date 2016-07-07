@@ -17,20 +17,20 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
     LatLng loc;
     String time;
     String userId;
+    String endpoint;
     int activity;
     String curBT;
     boolean isVerified;
 
-    SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId){
+    SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId, String endpoint){
         this.loc = new LatLng(location.getLatitude(), location.getLongitude());
         this.time = "";
         this.curBT = curBT;
         this.activity = activity;
         this.isVerified = false;
         this.userId = userId;
+        this.endpoint = endpoint;
     }
-
-    StringBuffer chaine = new StringBuffer("");
 
     protected void onPreExecute(Void aVoid) {
 
@@ -53,7 +53,7 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
             urlString.append(isVerified);
 
 
-            URL url = new URL(Constants.SERVER_URL + "/newParkingActivity");
+            URL url = new URL(endpoint);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();
             connection.setRequestMethod("POST");
             connection.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");

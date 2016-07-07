@@ -30,7 +30,7 @@ Cordova Parking Detector Plugin
   ### Example:
   `initPlugin(false, 2, "http://streetsmartdemo.cloudapp.net/newParkingActivity")`;
 
-  Creates a parking detector with no status messages, will prompt the user a maximum of two times, and will send data to http://streetsmartdemo.cloudapp.net/.
+  Creates a parking detector with no status messages, will prompt the user a maximum of two times, and will send data to http://streetsmartdemo.cloudapp.net/newParkingActivity.
 
 
 

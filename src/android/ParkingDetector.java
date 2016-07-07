@@ -67,6 +67,7 @@ public class ParkingDetector extends CordovaPlugin implements
 
     public static int askedForConformationCount = 0;
     public static int askedForConformationMax = 0;
+    public static String endpoint = "";
 
     public static boolean btVerificed = false;
 
@@ -91,6 +92,7 @@ public class ParkingDetector extends CordovaPlugin implements
         if(action.equals("initPlugin")) {
             showMessages = args.getBoolean(0);
             askedForConformationMax = args.getInt(1);
+            endpoint = args.getString(2);
             initPlugin();
             return true;
         }
@@ -374,6 +376,9 @@ public class ParkingDetector extends CordovaPlugin implements
                                 .setNegativeButton("no", new DialogInterface.OnClickListener() {
                                     public void onClick(DialogInterface dialog, int id) {
                                         pendingBTDetection = null;
+                                        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                                                mGoogleApiClient,
+                                                getActivityDetectionPendingIntent());
                                         notCarSet.add(lastBluetoothName);
                                         SharedPreferences mPrefs = cordova.getActivity().getPreferences(Context.MODE_PRIVATE);
                                         SharedPreferences.Editor editor = mPrefs.edit();
@@ -425,11 +430,11 @@ public class ParkingDetector extends CordovaPlugin implements
 
         if(eventCode==Constants.OUTCOME_PARKING){
             toastMessage("Parking detected");
-            SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID);
+            SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID, endpoint);
             sendPark.execute();
         }else{
             toastMessage("New space detected");
-            SendParkReport sendDePark = new SendParkReport(location,1,lastBluetoothName, btVerificed, userID);
+            SendParkReport sendDePark = new SendParkReport(location,1,lastBluetoothName, btVerificed, userID, endpoint);
             sendDePark.execute();
             isParked = false;
         }
