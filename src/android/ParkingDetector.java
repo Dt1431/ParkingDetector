@@ -61,6 +61,7 @@ public class ParkingDetector extends CordovaPlugin implements
     public static boolean isParked = false;
     public static String lastBluetoothName = "";
     public static String bluetoothTarget = "";
+    public static String mostLikelyActivity = "";
     public static Set<String> notCarSet = new HashSet<String>();
     public static int activityCounter = 0;
     public static int activityCountMax = 20;
@@ -217,6 +218,7 @@ public class ParkingDetector extends CordovaPlugin implements
             float onFootConfidence = result.getActivityConfidence(DetectedActivity.ON_FOOT);
             float inVehicleConfidence = result.getActivityConfidence(DetectedActivity.IN_VEHICLE);
             int mostLikelyActivityType = mostProbableActivity.getType();
+            mostLikelyActivity = getNameFromType(mostLikelyActivityType);
 
             Log.d("dt-test", "Foot: "+ onFootConfidence);
             Log.d("dt-test", "Vehicle: "+ inVehicleConfidence);
@@ -317,12 +319,16 @@ public class ParkingDetector extends CordovaPlugin implements
 
     public void countdown(){
         if(pendingBTDetection != null) {
-            int countdown = 60 - pendingBTDetection.timeSince();
-            if(countdown >= 0){
+            int cd = 60 - pendingBTDetection.timeSince();
+            String activityString = "";
+            if(cd >= 0){
+                if(mostLikelyActivity != null || mostLikelyActivity != ""){
+                    activityString = "(" + mostLikelyActivity + ") ";
+                }
                 if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING) {
-                    toastMessage("Waiting for vehicle to begin driving " + countdown);
+                    toastMessage(activityString + "Waiting for vehicle to begin driving " + cd);
                 } else {
-                    toastMessage("Waiting for vehicle to stop " + countdown);
+                    toastMessage(activityString + "Waiting for vehicle to stop " + cd);
                 }
                 new android.os.Handler().postDelayed(
                     new Runnable() {
@@ -330,7 +336,17 @@ public class ParkingDetector extends CordovaPlugin implements
                             countdown();
                         }
                     },
-                1000);
+                5000);
+            }else{
+                pendingBTDetection = null;
+                if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
+                    toastMessage("Stoping. No spot detected");
+                }else {
+                    toastMessage("Stoping. Parking not detected");
+                }
+                ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                        mGoogleApiClient,
+                        getActivityDetectionPendingIntent());
             }
         }
     }
@@ -367,7 +383,7 @@ public class ParkingDetector extends CordovaPlugin implements
                                         SharedPreferences.Editor editor = mPrefs.edit();
                                         bluetoothTarget = lastBluetoothName;
                                         btVerificed = true;
-                                        editor.putString("lastBluetoothName", lastBluetoothName);
+                                        editor.putString("bluetoothTarget", bluetoothTarget);
                                         editor.putBoolean("btVerificed", btVerificed);
                                         editor.commit();
                                         Log.d(LOG_TAG, "Bluetooth target identified " + bluetoothTarget);
@@ -419,24 +435,24 @@ public class ParkingDetector extends CordovaPlugin implements
 
     // actions taken when a parking/unparking event is detected and the location of the event is retrieved
     private void actionsOnBTDetection(int eventCode, Location location, String address){
-        long curTime = System.currentTimeMillis() / 1000;
-        lastStatusChangeTime = curTime;
-
-        pendingBTDetection = null;
-        //Stop activity listener
-        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
-                mGoogleApiClient,
-                getActivityDetectionPendingIntent());
-
-        if(eventCode==Constants.OUTCOME_PARKING){
-            toastMessage("Parking detected");
-            SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID, endpoint);
-            sendPark.execute();
-        }else{
-            toastMessage("New space detected");
-            SendParkReport sendDePark = new SendParkReport(location,1,lastBluetoothName, btVerificed, userID, endpoint);
-            sendDePark.execute();
-            isParked = false;
+        if(pendingBTDetection != null) {
+            pendingBTDetection = null;
+            long curTime = System.currentTimeMillis() / 1000;
+            lastStatusChangeTime = curTime;
+            //Stop activity listener
+            ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                    mGoogleApiClient,
+                    getActivityDetectionPendingIntent());
+            if (eventCode == Constants.OUTCOME_PARKING) {
+                toastMessage("Parking detected");
+                SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID, endpoint);
+                sendPark.execute();
+            } else {
+                toastMessage("New space detected");
+                SendParkReport sendDePark = new SendParkReport(location, 1, lastBluetoothName, btVerificed, userID, endpoint);
+                sendDePark.execute();
+                isParked = false;
+            }
         }
     }
     public String getNameFromType(int activityType) {
