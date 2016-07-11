@@ -196,12 +196,13 @@ public class ParkingDetector extends CordovaPlugin implements
         public void onReceive(Context context, Intent intent) {
             activityCounter += 1;
             Log.d("dt-test", "Activity counter: "+activityCounter);
-            if(activityCountMax <= activityCounter){
+            if(pendingBTDetection != null && activityCountMax <= activityCounter){
                 if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
                     toastMessage("Stoping. No spot detected");
                 }else{
                     toastMessage("Stoping. Parking not detected");
                 }
+                pendingBTDetection = null;
                 ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                         mGoogleApiClient,
                         getActivityDetectionPendingIntent());
