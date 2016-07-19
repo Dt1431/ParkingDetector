@@ -4,8 +4,6 @@ import android.location.Location;
 import android.os.AsyncTask;
 import android.util.Log;
 
-import com.google.android.gms.maps.model.LatLng;
-
 import java.io.DataOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
@@ -14,7 +12,7 @@ import java.net.URL;
  * Created by Sandeep Sasidharan on 2/3/2016.
  */
 public class SendParkReport extends AsyncTask<Void, Void, Void> {
-    LatLng loc;
+    Location loc;
     String time;
     String userId;
     String endpoint;
@@ -23,7 +21,7 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
     boolean isVerified;
 
     SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId, String endpoint){
-        this.loc = new LatLng(location.getLatitude(), location.getLongitude());
+        this.loc = location;
         this.time = "";
         this.curBT = curBT;
         this.activity = activity;
@@ -42,9 +40,9 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
             urlString.append("userId=");
             urlString.append(userId);
             urlString.append("&userLat=");
-            urlString.append(loc.latitude);
+            urlString.append(loc.getLatitude());
             urlString.append("&userLng=");
-            urlString.append(loc.longitude);
+            urlString.append(loc.getLongitude());
             urlString.append("&activity=");
             urlString.append(activity);
             urlString.append("&curBT=");
