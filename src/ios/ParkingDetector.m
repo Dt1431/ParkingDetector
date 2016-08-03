@@ -1,26 +1,41 @@
 /********* ParkingDetector.m Cordova Plugin Implementation *******/
 
 #import <Cordova/CDV.h>
+#import "MBProgressHUD.h"
 
 @interface ParkingDetector : CDVPlugin {
   // Member variables go here.
+    NSString* endpoint;
+    NSNumber* showMessages;
+    NSNumber* askedForConformationMax;
 }
 
-- (void)coolMethod:(CDVInvokedUrlCommand*)command;
+- (void)initPlugin:(CDVInvokedUrlCommand*)command;
 @end
 
 @implementation ParkingDetector
 
-- (void)coolMethod:(CDVInvokedUrlCommand*)command
+- (void)initPlugin:(CDVInvokedUrlCommand*)command
 {
     CDVPluginResult* pluginResult = nil;
-    NSString* echo = [command.arguments objectAtIndex:0];
+    
+    showMessages = [command.arguments objectAtIndex:0];
+    askedForConformationMax =  [command.arguments objectAtIndex:1];
+    endpoint = [command.arguments objectAtIndex:2];
+    
 
-    if (echo != nil && [echo length] > 0) {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_OK messageAsString:echo];
-    } else {
-        pluginResult = [CDVPluginResult resultWithStatus:CDVCommandStatus_ERROR];
-    }
+    MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.webView.superview animated:YES];
+    
+    // Configure for text only and offset down
+    hud.mode = MBProgressHUDModeText;
+    hud.label.text = @"Hi Dave this is working mapybe";
+    hud.margin = 10.f;
+    hud.yOffset = 150.f;
+    hud.removeFromSuperViewOnHide = YES;
+    
+    [hud hideAnimated:YES afterDelay:3];
+
+    
 
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
