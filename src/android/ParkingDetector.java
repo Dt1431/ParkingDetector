@@ -323,7 +323,7 @@ public class ParkingDetector extends CordovaPlugin implements
             int cd = 60 - pendingBTDetection.timeSince();
             String activityString = "";
             if(cd >= 0){
-                if(mostLikelyActivity != null || mostLikelyActivity != ""){
+                if(mostLikelyActivity != null || !mostLikelyActivity.equals("")){
                     activityString = "(" + mostLikelyActivity + ") ";
                 }
                 if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING) {
@@ -339,12 +339,12 @@ public class ParkingDetector extends CordovaPlugin implements
                     },
                 5000);
             }else{
-                pendingBTDetection = null;
                 if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
                     toastMessage("Stoping. No spot detected");
                 }else {
                     toastMessage("Stoping. Parking not detected");
                 }
+                pendingBTDetection = null;
                 ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                         mGoogleApiClient,
                         getActivityDetectionPendingIntent());
