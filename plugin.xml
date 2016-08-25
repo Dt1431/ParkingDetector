@@ -1,13 +1,65 @@
 <?xml version='1.0' encoding='utf-8'?>
-<plugin id="cordova-plugin-parking-detector" version="0.0.1" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android"><name>ParkingDetector</name><description>Parking Detector Plugin for Cordova</description><author>Pirouette Software</author><js-module name="ParkingDetector" src="www/ParkingDetector.js"><clobbers target="parkingDetector" /></js-module><platform name="android"><framework src="com.android.support:support-v4:+" /><framework src="com.google.android.gms:play-services-location:+" /><config-file parent="/*" target="res/xml/config.xml"><feature name="NormalDistribution"><param name="android-package" value="org.apache.commons.math3.distribution.NormalDistribution" /></feature><feature name="ParkingDetector"><param name="android-package" value="cordova.plugin.parking.detector.ParkingDetector" /></feature></config-file><config-file parent="/*" target="AndroidManifest.xml"><uses-permission android:name="android.permission.BLUETOOTH" /><uses-permission android:name="android.permission.BLUETOOTH_ADMIN" /><uses-permission android:name="com.google.android.gms.permission.ACTIVITY_RECOGNITION" /><uses-permission android:name="com.google.android.providers.gsf.permission.READ_GSERVICES" /><uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" /><uses-permission android:name="android.permission.BATTERY_STATS" /><uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" /><uses-permission android:name="android.permission.ACCESS_COARSE_UPDATES" /><uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" /><uses-permission android:name="android.permission.WAKE_LOCK" /><uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" /><uses-permission android:name="android.permission.INTERNET" /></config-file><config-file parent="/manifest/application" target="AndroidManifest.xml"><service android:enabled="true" android:name="cordova.plugin.parking.detector.ActivityRecognitionIntentService" /></config-file><source-file src="src/android/ParkingDetector.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/BTPendingDetection.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/ConditionalProbability.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/Constants.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/SendParkReport.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/ActivityRecognitionIntentService.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/libs/commons-math3-3.6.1.jar" target-dir="libs" />
-</platform>
+<plugin id="cordova-plugin-parking-detector" version="0.0.1" xmlns="http://apache.org/cordova/ns/plugins/1.0" xmlns:android="http://schemas.android.com/apk/res/android">
+	<name>ParkingDetector</name>
+	<description>Parking Detector Plugin for Cordova</description>
+	<author>Pirouette Software</author>
+	<js-module name="ParkingDetector" src="www/ParkingDetector.js">
+		<clobbers target="parkingDetector" />
+	</js-module>
+	<platform name="android">
+		<config-file parent="/*" target="res/xml/config.xml">
+			<feature name="NormalDistribution">
+				<param name="android-package" value="org.apache.commons.math3.distribution.NormalDistribution" />
+			</feature>
+			<feature name="ParkingDetector">
+				<param name="android-package" value="cordova.plugin.parking.detector.ParkingDetector" />
+			</feature>
+		</config-file>
+		<config-file parent="/*" target="AndroidManifest.xml">
+			<uses-permission android:name="android.permission.BLUETOOTH" />
+			<uses-permission android:name="android.permission.BLUETOOTH_ADMIN" />
+			<uses-permission android:name="android.ACTIVITY_RECOGNITION" />
+			<uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
+			<uses-permission android:name="android.permission.BATTERY_STATS" />
+			<uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+			<uses-permission android:name="android.permission.ACCESS_COARSE_UPDATES" />
+			<uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+			<uses-permission android:name="android.permission.WAKE_LOCK" />
+			<uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+			<uses-permission android:name="android.permission.INTERNET" />
+		</config-file>
+		<config-file parent="/manifest/application" target="AndroidManifest.xml">
+			<service android:enabled="true" android:name="cordova.plugin.parking.detector.ActivityRecognitionIntentService" />
+		</config-file>
+		<source-file src="src/android/ParkingDetector.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/BTPendingDetection.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/ConditionalProbability.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/Constants.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/SendParkReport.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/ActivityRecognitionIntentService.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/libs/commons-math3-3.6.1.jar" target-dir="libs" />
+	</platform>
 	<platform name="ios">
 		<config-file parent="/*" target="config.xml">
-			<feature name="ParkingDetector"><param name="ios-package" value="ParkingDetector" />
-		</feature>
-	</config-file>
-	<source-file src="src/ios/ParkingDetector.m" />
-	<source-file src="src/ios/MBProgressHUD.m" />
-	<source-file src="src/ios/MBProgressHUD.h" />
+			<feature name="ParkingDetector">
+				<param name="ios-package" value="ParkingDetector" />
+			</feature>
+		</config-file>
+        <config-file target="*-Info.plist" parent="NSLocationAlwaysUsageDescription">
+            <string></string>
+        </config-file>
+		<config-file target="*-Info.plist" parent="UIBackgroundModes">
+			<array>
+				<string>bluetooth-central</string>
+				<string>location-services</string>
+			</array>
+		</config-file>
+		<source-file src="src/ios/ParkingDetector.m" />
+		<source-file src="src/ios/MBProgressHUD.m" />
+		<header-file src="src/ios/MBProgressHUD.h" />
+
+		<framework src="CoreBluetooth.framework" />
+		<framework src="ExternalAccessory.framework" />
+		<framework src="CoreLocation.framework" />
+		<framework src="CoreMotion.framework" />
 	</platform>
 </plugin>
