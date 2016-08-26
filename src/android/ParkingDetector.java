@@ -85,7 +85,7 @@ public class ParkingDetector extends CordovaPlugin implements
     public static long lastStatusChangeTime = 0;
     public static boolean showMessages = false;
 
-    private static final String LOG_TAG = "BluetoothStatus";
+    private static final String LOG_TAG = "SS Parking Detector";
     private BluetoothAdapter bluetoothAdapter;
 
     @Override
@@ -152,7 +152,7 @@ public class ParkingDetector extends CordovaPlugin implements
     }
 
     private void initPlugin() {
-        Log.d("dt-test", "Plugin Init for user: " + userID);
+        Log.d(LOG_TAG, "Plugin Init for user: " + userID);
         //test if B supported
         bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         if (bluetoothAdapter == null) {
@@ -191,12 +191,12 @@ public class ParkingDetector extends CordovaPlugin implements
     }
     //broadcast recieve for Activity Recognition
     private final BroadcastReceiver mReceiver2 = new BroadcastReceiver() {
-        protected static final String TAG = "activity-detection-response-receiver";
         @Override
         public void onReceive(Context context, Intent intent) {
             activityCounter += 1;
-            Log.d("dt-test", "Activity counter: "+activityCounter);
+            Log.d(LOG_TAG, "Activity counter: "+activityCounter);
             if(pendingBTDetection != null && activityCountMax <= activityCounter){
+                //Don't think this is ever called now that we've added countdown
                 if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
                     toastMessage("Stoping. No spot detected");
                 }else{
@@ -221,9 +221,9 @@ public class ParkingDetector extends CordovaPlugin implements
             int mostLikelyActivityType = mostProbableActivity.getType();
             mostLikelyActivity = getNameFromType(mostLikelyActivityType);
 
-            Log.d("dt-test", "Foot: "+ onFootConfidence);
-            Log.d("dt-test", "Vehicle: "+ inVehicleConfidence);
-            Log.d("dt-test", "Most likely: "+ getNameFromType(mostLikelyActivityType));
+            Log.d(LOG_TAG, "Foot: "+ onFootConfidence);
+            Log.d(LOG_TAG, "Vehicle: "+ inVehicleConfidence);
+            Log.d(LOG_TAG, "Most likely: "+ getNameFromType(mostLikelyActivityType));
 
             if (mostLikelyActivityType == DetectedActivity.UNKNOWN) {
                 if (inVehicleConfidence > 100 - inVehicleConfidence - mostLikelyActivityConfidence)
@@ -234,7 +234,7 @@ public class ParkingDetector extends CordovaPlugin implements
                 }
             }
             if (currentTransportationMode != mostLikelyActivityType &&
-                    (mostLikelyActivityType == DetectedActivity.IN_VEHICLE || mostLikelyActivityType == DetectedActivity.ON_FOOT)) {
+                    (mostLikelyActivityType == DetectedActivity.IN_VEHICLE || mostLikelyActivityType == DetectedActivity.ON_FOOT || mostLikelyActivityType == DetectedActivity.STILL)) {
                 prevTransportationMode = currentTransportationMode;
                 currentTransportationMode = mostLikelyActivityType;
             }
@@ -269,7 +269,7 @@ public class ParkingDetector extends CordovaPlugin implements
                 if(!notCarSet.isEmpty() && notCarSet.contains(device.getName())){
                     Log.d(LOG_TAG, "Ignoring non-car bluetooth change");
                 }
-                else if (curTime - lastStatusChangeTime > Constants.STATUS_CHANGE_INTERVAL_THRESHOLD) {
+                else if (curTime - lastStatusChangeTime > Constants.STATUS_CHANGE_INTERVAL_THRESHOLD && pendingBTDetection == null) {
                     lastBluetoothName = device.getName();
                     Log.d(LOG_TAG, "Passed parking status time check");
                     if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
@@ -298,6 +298,8 @@ public class ParkingDetector extends CordovaPlugin implements
                         LocationServices.FusedLocationApi.requestLocationUpdates(
                                 mGoogleApiClient, mLocationRequest, new LocationClientListener(eventCode));
 
+                        Log.d(LOG_TAG, "Remove updates - 1");
+
                         ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                                 mGoogleApiClient,
                                 getActivityDetectionPendingIntent());
@@ -323,13 +325,15 @@ public class ParkingDetector extends CordovaPlugin implements
             int cd = 60 - pendingBTDetection.timeSince();
             String activityString = "";
             if(cd >= 0){
-                if(mostLikelyActivity != null || !mostLikelyActivity.equals("")){
-                    activityString = "(" + mostLikelyActivity + ") ";
+                if(mostLikelyActivity != null && !mostLikelyActivity.equals("")){
+                    activityString = "\r\nLast Activity: " + mostLikelyActivity;
                 }
-                if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING) {
-                    toastMessage(activityString + "Waiting for vehicle to begin driving " + cd);
-                } else {
-                    toastMessage(activityString + "Waiting for vehicle to stop " + cd);
+                if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && mostLikelyActivity != "in_vehicle") {
+                    toastMessage("Waiting for vehicle to begin driving: " + cd + activityString);
+                } else if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity == "in_vehicle") {
+                    toastMessage("Waiting for vehicle to stop: " + cd + activityString);
+                }else if(pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity != "on_foot") {
+                    toastMessage("Waiting for driver to begin walking: " + cd + activityString);
                 }
                 new android.os.Handler().postDelayed(
                     new Runnable() {
@@ -358,11 +362,11 @@ public class ParkingDetector extends CordovaPlugin implements
 
         public LocationClientListener(int eventCode){
             this.eventCode=eventCode;
-            Log.d("dt-test", "Creating location listener");
+            Log.d(LOG_TAG, "Creating location listener");
         }
         @Override
         public void onLocationChanged(Location location) {
-            Log.d("dt-test", "IN ON LOCATION CHANGE, lat=" + location.getLatitude() + ", lon=" + location.getLongitude());
+            Log.d(LOG_TAG, "IN ON LOCATION CHANGE, lat=" + location.getLatitude() + ", lon=" + location.getLongitude());
             pendingBTDetection = new BTPendingDetection(eventCode, location);
             countdown();
             if(btVerificed){
@@ -393,6 +397,7 @@ public class ParkingDetector extends CordovaPlugin implements
                                 .setNegativeButton("no", new DialogInterface.OnClickListener() {
                                     public void onClick(DialogInterface dialog, int id) {
                                         pendingBTDetection = null;
+                                        Log.d(LOG_TAG, "Remove updates - 2");
                                         ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                                                 mGoogleApiClient,
                                                 getActivityDetectionPendingIntent());
@@ -415,9 +420,9 @@ public class ParkingDetector extends CordovaPlugin implements
     }
 
     public void validateParking(int eventCode, Location location) {
-        Log.d("dt-test", "in validate parking");
+        Log.d(LOG_TAG, "in validate parking");
         if(eventCode==Constants.OUTCOME_UNPARKING){
-            Log.d("dt-test", "In unparking");
+            Log.d(LOG_TAG, "In unparking");
             if (currentTransportationMode == DetectedActivity.IN_VEHICLE) {
                 //Looks like we've got an open spot!!!
                 actionsOnBTDetection(eventCode, location, null);
@@ -425,8 +430,8 @@ public class ParkingDetector extends CordovaPlugin implements
 
             }
         }else{
-            Log.d("dt-test", "In parking");
-            if (prevTransportationMode == DetectedActivity.IN_VEHICLE || lastBluetoothName.equals(bluetoothTarget)) {
+            Log.d(LOG_TAG, "In parking");
+            if (currentTransportationMode == DetectedActivity.ON_FOOT || lastBluetoothName.equals(bluetoothTarget)) {
                 actionsOnBTDetection(eventCode, location, null);
             } else {
 
@@ -441,6 +446,8 @@ public class ParkingDetector extends CordovaPlugin implements
             long curTime = System.currentTimeMillis() / 1000;
             lastStatusChangeTime = curTime;
             //Stop activity listener
+            Log.d(LOG_TAG, "Remove updates - 3");
+
             ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                     mGoogleApiClient,
                     getActivityDetectionPendingIntent());

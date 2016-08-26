@@ -3,6 +3,8 @@ package cordova.plugin.parking.detector;
 import android.app.IntentService;
 import android.content.Intent;
 import android.support.v4.content.LocalBroadcastManager;
+import android.util.Log;
+
 import com.google.android.gms.location.ActivityRecognitionResult;
 
 /**
@@ -33,6 +35,7 @@ public class ActivityRecognitionIntentService extends IntentService {
      */
     @Override
     protected void onHandleIntent(Intent intent) {
+        Log.d( "SS Parking Detector", "Inside onHandle Intent");
         ActivityRecognitionResult result = ActivityRecognitionResult.extractResult(intent);
         Intent localIntent = new Intent(Constants.BROADCAST_ACTION);
         // Broadcast the list of detected activities.
