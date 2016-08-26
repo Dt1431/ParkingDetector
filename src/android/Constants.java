@@ -4,7 +4,6 @@ import android.content.Context;
 import android.content.res.Resources;
 
 import com.google.android.gms.location.DetectedActivity;
-import com.pirouette.pluginexample.R;
 
 import java.util.HashMap;
 import java.util.HashSet;
