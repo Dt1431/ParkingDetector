@@ -59,7 +59,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     endpoint = [command.arguments objectAtIndex:2];
     
     //Initialize Central Manager
-    if (nil == locationManager){
+    if (nil == centralManager){
         centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
     }
     //Initalize Location Manager
@@ -83,15 +83,16 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 
 - (void)sendMessage:(NSString*)message {
     if(showMessages){
-        MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.webView.superview animated:YES];
-        
-        // Configure for text only and offset down
-        hud.mode = MBProgressHUDModeText;
-        hud.label.text = message;
-        hud.margin = 10.f;
-        hud.yOffset = 150.f;
-        hud.removeFromSuperViewOnHide = YES;
-        [hud hideAnimated:YES afterDelay:3];
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.webView.superview animated:YES];
+            // Configure for text only and offset down
+            hud.mode = MBProgressHUDModeText;
+            hud.label.text = message;
+            hud.margin = 10.f;
+            hud.yOffset = 150.f;
+            hud.removeFromSuperViewOnHide = YES;
+            [hud hideAnimated:YES afterDelay:3];
+        }];
     }else{
         NSLog(@"SteetSmart Message: %@",message);
     }
@@ -344,10 +345,12 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
         for (EAAccessory *acc in accessoryList) {
             NSLog(@"Connected device: %@",acc.name);
         }
-        
         //Else enabling was successful
-        [centralManager scanForPeripheralsWithServices:[NSArray arrayWithObject:[CBUUID UUIDWithString:@"FFE0"]] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }]; 
-         */
+        [centralManager scanForPeripheralsWithServices:[NSArray arrayWithObject:[CBUUID UUIDWithString:@"111F"]] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }]; */
+
+        [centralManager scanForPeripheralsWithServices:nil options:nil];
+        
+        
         [self sendMessage: @"Starting Parking Detector"];
         [self getCurrentLocation];
         lastBTDetectionDate = [NSDate new];
