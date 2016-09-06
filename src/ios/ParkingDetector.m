@@ -352,7 +352,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
         
         
         [self sendMessage: @"Starting Parking Detector"];
-        [self getCurrentLocation];
+        //[self getCurrentLocation];
         lastBTDetectionDate = [NSDate new];
     }
 }

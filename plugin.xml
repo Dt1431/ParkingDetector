@@ -50,6 +50,9 @@
         <config-file target="*-Info.plist" parent="NSLocationAlwaysUsageDescription">
             <string></string>
         </config-file>
+        <config-file target="*-Info.plist" parent="NSMotionUsageDescription">
+            <string>This app uses motion data to crowdsource open parking spaces</string>
+        </config-file>
 		<config-file target="*-Info.plist" parent="UIBackgroundModes">
 			<array>
 				<string>bluetooth-central</string>
