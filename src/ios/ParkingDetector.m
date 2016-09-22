@@ -346,9 +346,12 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
             NSLog(@"Connected device: %@",acc.name);
         }
         //Else enabling was successful
-        [centralManager scanForPeripheralsWithServices:[NSArray arrayWithObject:[CBUUID UUIDWithString:@"111F"]] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }]; */
+        [centralManager scanForPeripheralsWithServices:[NSArray arrayWithObject:[CBUUID UUIDWithString:@"111F"]] options:@{ CBCentralManagerScanOptionAllowDuplicatesKey : @NO }];
+        
+        
 
         [centralManager scanForPeripheralsWithServices:nil options:nil];
+        */
         
         
         [self sendMessage: @"Starting Parking Detector"];
@@ -360,7 +363,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 - (void)centralManager:(CBCentralManager *)central didDiscoverPeripheral:(CBPeripheral *)peripheral advertisementData:(NSDictionary *)advertisementData RSSI:(NSNumber *)RSSI {
     
     NSLog(@"Discovered %@ at %@", peripheral.name, RSSI);
-    [self sendMessage: @"Discovered \(peripheral.name)"];
+    //[self sendMessage: @"Discovered \(peripheral.name)"];
 }
 
 - (void)centralManager:(CBCentralManager *)central didConnectPeripheral:(CBPeripheral *)peripheral {
