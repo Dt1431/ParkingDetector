@@ -64,7 +64,8 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     
     //Initialize Central Manager
     if (nil == centralManager){
-        centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil];
+        NSDictionary *options = [NSDictionary dictionaryWithObjectsAndKeys:[NSNumber numberWithBool:NO], CBCentralManagerOptionShowPowerAlertKey, nil];
+        centralManager = [[CBCentralManager alloc] initWithDelegate:self queue:nil options:options];
     }
     
     //Initalize Location Manager
@@ -82,12 +83,12 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     //Set parking variables
     userId = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
     defaults = [NSUserDefaults standardUserDefaults];
-
+    
     if([defaults objectForKey:@"notCarBT"] != nil){
         isVerified = [defaults boolForKey:@"isVerified"];
         verifiedBT = [defaults objectForKey:@"verifiedBT"];
         conformationCount = [defaults integerForKey:@"conformationCount"];
-        notCarBT = [defaults objectForKey:@"notCarBT"];
+        notCarBT = [NSMutableArray arrayWithArray:[defaults objectForKey:@"notCarBT"]];
     }else{
         NSLog(@"First Time");
         //First Time
@@ -185,7 +186,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 
 - (void)checkPastMotionActivities{
     if([CMMotionActivityManager isActivityAvailable]){
-        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60*2]
+        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60]
                                                       toDate:[NSDate new]
                                                      toQueue:[NSOperationQueue new]
                                                  withHandler:^(NSArray *activities, NSError *error) {
@@ -198,45 +199,44 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
                     if(!foundFirst){
                         if(activity.confidence == 2 && activity.automotive){
                             foundFirst = YES;
+                            break;
                         }
                     }
+                    /*
                     else{
                         if(activity.confidence == 2 && (activity.stationary || activity.walking)){
                             [self sendParkingEventToServer: 1];
                             return;
                         }
                     }
+                     */
                 }else{
                     //Look for high confidence stationary or walking, followed by automotive
                     if(!foundFirst){
                         if(activity.confidence == 2 && (activity.stationary || activity.walking)){
                             foundFirst = YES;
+                             break;
                         }
                     }
+                    /*
                     else{
                         if(activity.confidence == 2 && activity.automotive){
                             [self sendParkingEventToServer: -1];
                             return;
                         }
                     }
+                    */
                 }
             }
             //If parking / de-parking is partially validated, listen for future activities
             if(foundFirst){
                 pendingActivityDetection = YES;
-                /*
-                if(isParking){
-                    [self sendMessage: @"Waiting for car to stop"];
-                }else{
-                    [self sendMessage: @"Waiting for car to begin driving"];
-                }
-                */
                 [self checkFutureMotionActivities];
             }else{
                 if(isParking){
-                    [self sendMessage: @"Failed parking activity check 1\r driving not detected durring last minute"];
+                    [self sendMessage: @"Failed parking activity check 1\rdriving not detected durring last minute"];
                 }else{
-                    [self sendMessage: @"Failed new  activity check 1\r walking or standing not detected durring last minute"];
+                    [self sendMessage: @"Failed new  activity check 1\rwalking or stationary not detected durring last minute"];
                 }
             }
         }];
@@ -251,7 +251,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
         [motionActivityManager startActivityUpdatesToQueue:[NSOperationQueue mainQueue] withHandler:^(CMMotionActivity * activity){
             NSDate *now = [NSDate new];
             NSTimeInterval secs = [now timeIntervalSinceDate:lastBTDetectionDate];
-            if(secs > 90){
+            if(secs > 60){
                 pendingActivityDetection = NO;
             }
             if(!isParking && activity.confidence == 2 && activity.automotive){
@@ -263,11 +263,13 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
                 [motionActivityManager stopActivityUpdates];
                 [self sendParkingEventToServer: -1];
                 return;
-            }else if(secs > 10){
+            }else if(secs > 2){
                 if(isParking){
-                    [self sendMessage: @"Waiting for car to stop"];
+                    [self sendMessage: [NSString stringWithFormat:@"Waiting for car to stop\r%@",
+                                        [NSString stringWithFormat:@"Countdown: %i", (int)(60 - secs)]]];
                 }else{
-                    [self sendMessage: @"Waiting for car to begin driving"];
+                    [self sendMessage: [NSString stringWithFormat:@"Waiting for car to begin driving\r%@",
+                                        [NSString stringWithFormat:@"Countdown: %i", (int)(60 - secs)]]];
                 }
             }
             /*
@@ -303,8 +305,11 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     }else{
         [self sendMessage: @"New parking spot detected"];
     }
+    NSString* version = [[[NSBundle mainBundle] infoDictionary] objectForKey:@"CFBundleVersion"];
  
-    NSString *post = [NSString stringWithFormat:@"userId=%@&userLat=%f@&userLng=%f@&activity=%f&curBT=%@&isVerified=%hhu",userId, userLat, userLng, parkingEvent, curBT,isVerified];
+    NSString *post = [NSString stringWithFormat:@"userId=%@&userLat=%f@&userLng=%f@&activity=%i&curBT=%@&isVerified=%s&os=%@&version=%@",
+                      userId, userLat, userLng, (int) parkingEvent, curBT, isVerified ? "true" : "false", @"ios",version];
+
     NSLog(@"POST STRING: %@",post);
     NSData *postData = [post dataUsingEncoding:NSASCIIStringEncoding allowLossyConversion:YES];
     NSString *postLength = [NSString stringWithFormat:@"%lu",(unsigned long)[postData length]];
