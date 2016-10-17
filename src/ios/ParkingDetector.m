@@ -20,26 +20,31 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 
 
 @interface ParkingDetector : CDVPlugin <CBCentralManagerDelegate, CBPeripheralDelegate, CLLocationManagerDelegate> {
-  // Member variables go here.
-    CBCentralManager *centralManager;
-    NSString *endpoint;
-    NSNumber *showMessages;
-    NSDate *lastBTDetectionDate;
+    //DT NOTE: Maybe use property instead? Think the additional overhead is insignificant
+    CBCentralManager* centralManager;
+    NSString* endpoint;
+    NSNumber* showMessages;
+    NSDate* lastBTDetectionDate;
     double userLat;
     double userLng;
+    double lastParkLat;
+    double lastParkLng;
+    NSDate* lastParkDate;
     int askedForConformationMax;
-    NSString *userId;
-    CLLocationManager *locationManager;
-    CMMotionActivityManager *motionActivityManager;
-    NSString *curBT;
-    NSString *verifiedBT;
+    NSString* userId;
+    CLLocationManager* locationManager;
+    CMMotionActivityManager* motionActivityManager;
+    NSString* curBT;
+    NSString* verifiedBT;
     BOOL isVerified;
     int conformationCount;
     BOOL pendingActivityDetection;
     BOOL isParking;
-    NSUserDefaults *defaults;
-    NSMutableArray *notCarBT;
+    NSUserDefaults* defaults;
+    NSMutableArray* notCarBT;
 }
+
+@property (nonatomic, strong) AVPlayer* audioPlayer;
 
 - (void)initPlugin:(CDVInvokedUrlCommand*)command;
 - (void)sendMessage:(NSString*)message;
@@ -84,20 +89,24 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     userId = [[[UIDevice currentDevice] identifierForVendor] UUIDString];
     defaults = [NSUserDefaults standardUserDefaults];
     
-    if([defaults objectForKey:@"notCarBT"] != nil){
-        isVerified = [defaults boolForKey:@"isVerified"];
-        verifiedBT = [defaults objectForKey:@"verifiedBT"];
-        conformationCount = [defaults integerForKey:@"conformationCount"];
-        notCarBT = [NSMutableArray arrayWithArray:[defaults objectForKey:@"notCarBT"]];
+    if([defaults objectForKey:@"pd_notCarBT"] != nil){
+        isVerified = [defaults boolForKey:@"pd_isVerified"];
+        verifiedBT = [defaults objectForKey:@"pd_verifiedBT"];
+        conformationCount = [defaults integerForKey:@"pd_conformationCount"];
+        notCarBT = [NSMutableArray arrayWithArray:[defaults objectForKey:@"pd_notCarBT"]];
+        lastParkLat = [defaults doubleForKey:@"pd_lastParkLat"];
+        lastParkLng = [defaults doubleForKey:@"pd_lastParkLng"];
+        lastParkDate = [defaults objectForKey:@"pd_lastParkDate"];
+        
     }else{
         NSLog(@"First Time");
         //First Time
         isVerified = NO;
         conformationCount = 0;
         notCarBT = [NSMutableArray new];
-        [defaults setInteger:conformationCount forKey:@"conformationCount"];
-        [defaults setBool:isVerified forKey:@"isVerified"];
-        [defaults setObject:notCarBT forKey:@"notCarBT"];
+        [defaults setInteger:conformationCount forKey:@"pd_conformationCount"];
+        [defaults setBool:isVerified forKey:@"pd_isVerified"];
+        [defaults setObject:notCarBT forKey:@"pd_notCarBT"];
         [defaults synchronize];
     }
     curBT = @"";
@@ -109,8 +118,6 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     if(verifiedBT != nil){
         NSLog(@"Cars BT: %@", verifiedBT);
     }
-    
-    //Create audio stream,
     
     [self.commandDelegate sendPluginResult:pluginResult callbackId:command.callbackId];
 }
@@ -136,7 +143,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 /************** BT Confirmation Alert Box *****************/
 - (void)showBTAlertBox:(NSString*)BTName{
     conformationCount ++;
-    [defaults setInteger:conformationCount forKey:@"conformationCount"];
+    [defaults setInteger:conformationCount forKey:@"pd_conformationCount"];
     [defaults synchronize];
     UIAlertController * alert =   [UIAlertController
                                   alertControllerWithTitle:[NSString stringWithFormat:@"Is %@ your car's bluetooth?", curBT]
@@ -151,7 +158,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
                              [alert dismissViewControllerAnimated:YES completion:nil];
                              NSLog(@"Adding %@ to NOT BT array", curBT);
                              [notCarBT addObject:curBT];
-                             [defaults setObject:notCarBT forKey:@"notCarBT"];
+                             [defaults setObject:notCarBT forKey:@"pd_notCarBT"];
                              [defaults synchronize];
                              
                          }];
@@ -163,10 +170,10 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
                              
                                  [alert dismissViewControllerAnimated:YES completion:nil];
                                  isVerified = YES;
-                                 [defaults setBool:isVerified forKey:@"isVerified"];
+                                 [defaults setBool:isVerified forKey:@"pd_isVerified"];
                                  NSLog(@"Setting %@ as car's bluetooth", curBT);
                                  verifiedBT = curBT;
-                                 [defaults setObject:verifiedBT forKey:@"verifiedBT"];
+                                 [defaults setObject:verifiedBT forKey:@"pd_verifiedBT"];
                                  isParking = NO;
                                  [defaults synchronize];
                                  //Check to see if de-parking has occured
@@ -186,7 +193,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 
 - (void)checkPastMotionActivities{
     if([CMMotionActivityManager isActivityAvailable]){
-        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60]
+        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60*2]
                                                       toDate:[NSDate new]
                                                      toQueue:[NSOperationQueue new]
                                                  withHandler:^(NSArray *activities, NSError *error) {
@@ -233,6 +240,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
                 pendingActivityDetection = YES;
                 [self checkFutureMotionActivities];
             }else{
+                pendingActivityDetection = NO;
                 if(isParking){
                     [self sendMessage: @"Failed parking activity check 1\rdriving not detected durring last minute"];
                 }else{
@@ -247,7 +255,6 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     
     if([CMMotionActivityManager isActivityAvailable] == YES){
         //register for Coremotion notifications
-        pendingActivityDetection = YES;
         [motionActivityManager startActivityUpdatesToQueue:[NSOperationQueue mainQueue] withHandler:^(CMMotionActivity * activity){
             NSDate *now = [NSDate new];
             NSTimeInterval secs = [now timeIntervalSinceDate:lastBTDetectionDate];
@@ -300,7 +307,12 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
 /************** Post parking data *******************************/
 
 - (void)sendParkingEventToServer: (double)parkingEvent{
+    pendingActivityDetection = NO;
     if(parkingEvent == 1){
+        lastParkLat = [defaults doubleForKey:@"pd_lastParkLat"];
+        lastParkLng = [defaults doubleForKey:@"pd_lastParkLng"];
+        lastParkDate = [defaults objectForKey:@"pd_lastParkDate"];
+
         [self sendMessage: @"Parking detected"];
     }else{
         [self sendMessage: @"New parking spot detected"];
@@ -309,7 +321,6 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
  
     NSString *post = [NSString stringWithFormat:@"userId=%@&userLat=%f@&userLng=%f@&activity=%i&curBT=%@&isVerified=%s&os=%@&version=%@",
                       userId, userLat, userLng, (int) parkingEvent, curBT, isVerified ? "true" : "false", @"ios",version];
-
     NSLog(@"POST STRING: %@",post);
     NSData *postData = [post dataUsingEncoding:NSASCIIStringEncoding allowLossyConversion:YES];
     NSString *postLength = [NSString stringWithFormat:@"%lu",(unsigned long)[postData length]];
@@ -375,11 +386,35 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     
     userLat = location.coordinate.latitude;
     userLng = location.coordinate.longitude;
+    
+    //Create a geofence
+    CLLocationCoordinate2D center = CLLocationCoordinate2DMake(userLat,
+                                                               userLng);
+    CLRegion *lastLocation = [[CLCircularRegion alloc]initWithCenter:center
+                                                        radius:100.0
+                                                    identifier:@"lastLocation"];
 
+    [locationManager startMonitoringForRegion:lastLocation];
+    
     //Validate parking
     [self checkPastMotionActivities];
 }
-
+//For geofence
+- (void)locationManager:(CLLocationManager *)manager didEnterRegion:(CLRegion *)region{
+    //Create audio stream
+    NSURL *url = [NSURL URLWithString:@"http://daveturner.tech/Level-up-sound-effect.mp3"];
+    
+    NSData *data = [NSData dataWithContentsOfURL:url];
+    
+    AVAudioPlayer *player =[[AVAudioPlayer alloc] initWithData:data error:nil];
+    player.numberOfLoops = 10;
+    self.audioPlayer = player;
+    [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback error:nil];
+    [[AVAudioSession sharedInstance] setActive: YES error: nil];
+    [[UIApplication sharedApplication] beginReceivingRemoteControlEvents];
+    [self.audioPlayer play];
+    
+}
 
 /************** Central Manager Delegates *********************/
 
@@ -504,7 +539,7 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
     }
     
     // set audio session category and options
-    success = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryAmbient withOptions:AVAudioSessionCategoryOptionAllowBluetooth error:nil];
+    success = [[AVAudioSession sharedInstance] setCategory:AVAudioSessionCategoryPlayback withOptions: AVAudioSessionCategoryOptionAllowBluetooth | AVAudioSessionCategoryOptionMixWithOthers error:nil];
     if (!success) {
         NSLog(@"setCategoryError");
     }
@@ -566,11 +601,15 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
             break;
         case AVAudioSessionRouteChangeReasonOldDeviceUnavailable:
             if(![curBT isEqual: @"Not BT"] && ![notCarBT containsObject: curBT]){
-                [self sendMessage: [NSString stringWithFormat:@"Disconnected from %@",curBT]];
-                isParking = YES;
-                lastBTDetectionDate = [NSDate new];
-                //Check if parking occured
-                [self getCurrentLocation];
+                if(pendingActivityDetection){
+                    NSLog(@"Ignoring change, pending activity detection");
+                }else{
+                    [self sendMessage: [NSString stringWithFormat:@"Disconnected from %@",curBT]];
+                    isParking = YES;
+                    lastBTDetectionDate = [NSDate new];
+                    //Check if parking occured
+                    [self getCurrentLocation];
+                }
             }else{
                 NSLog(@"Lost conenction was not BT or BT in not car BT list");
             }
@@ -578,10 +617,14 @@ NSString *const logOperationUnsupported = @"Operation unsupported";
         case AVAudioSessionRouteChangeReasonNewDeviceAvailable:
             curBT = [self getBTPortName];
             if(![curBT isEqual: @"Not BT"] && ![notCarBT containsObject: curBT]){
-                isParking = NO;
-                lastBTDetectionDate = [NSDate new];
-                //Check for de-parking
-                [self getCurrentLocation];
+                if(pendingActivityDetection){
+                    NSLog(@"Ignoring change, pending activity detection");
+                }else{
+                    isParking = NO;
+                    lastBTDetectionDate = [NSDate new];
+                    //Check for de-parking
+                    [self getCurrentLocation];
+                }
             }else{
                 NSLog(@"Not conencted to BT or BT in not car BT list");
             }
