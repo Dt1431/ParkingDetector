@@ -4,7 +4,7 @@
 	<description>Parking Detector Plugin for Cordova</description>
 	<author>Pirouette Software</author>
 	<js-module name="ParkingDetector" src="www/ParkingDetector.js">
-		<clobbers target="parkingDetector" />
+		<clobbers target="_parkingDetector" />
 	</js-module>
 	<platform name="android">
 		<framework src="com.google.android.gms:play-services-location:+" />
