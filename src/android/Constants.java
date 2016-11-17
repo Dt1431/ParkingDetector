@@ -33,6 +33,8 @@ public final class Constants {
 		//StreetSmart Server
 		public static String SERVER_URL = "http://streetsmartdemo.cloudapp.net";
 
+		//public static String SERVER_URL = "http://streetsmartdemo.cloudapp.net";
+
 
 	/************************************************
      * Parking Application related

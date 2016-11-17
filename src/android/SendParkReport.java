@@ -7,6 +7,7 @@ import android.util.Log;
 import java.io.DataOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.util.Date;
 
 /**
  * Created by Sandeep Sasidharan on 2/3/2016.
@@ -18,16 +19,24 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
     String endpoint;
     int activity;
     String curBT;
+    String initiatedBy;
+    String version;
     boolean isVerified;
 
-    SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId, String endpoint){
+    SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId, String endpoint, String initiatedBy, String version){
         this.loc = location;
         this.time = "";
         this.curBT = curBT;
         this.activity = activity;
-        this.isVerified = false;
+        this.isVerified = isVerified;
         this.userId = userId;
         this.endpoint = endpoint;
+        this.initiatedBy = initiatedBy;
+        if(initiatedBy.equals("user")){
+            this.isVerified = false;
+            this.curBT = "";
+        }
+        this.version = version;
     }
 
     protected void onPreExecute(Void aVoid) {
@@ -39,17 +48,22 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
             StringBuilder urlString = new StringBuilder();
             urlString.append("userId=");
             urlString.append(userId);
-            urlString.append("&userLat=");
+            urlString.append("&parkLat=");
             urlString.append(loc.getLatitude());
-            urlString.append("&userLng=");
+            urlString.append("&parkLng=");
             urlString.append(loc.getLongitude());
             urlString.append("&activity=");
             urlString.append(activity);
-            urlString.append("&curBT=");
+            urlString.append("&audioPort=");
             urlString.append(curBT);
             urlString.append("&isVerified=");
             urlString.append(isVerified);
-
+            urlString.append("&os=android");
+            urlString.append("&version=");
+            urlString.append(version);
+            urlString.append("&initiatedBy=");
+            urlString.append(initiatedBy);
+            urlString.append("&activityVerified=true");
 
             URL url = new URL(endpoint);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();

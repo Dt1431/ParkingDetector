@@ -7,7 +7,17 @@ window.parkingDetector = {
     initParkingDetectorPlugin: function(showMessages, maxPrompts, endpoint, success, error) {
         exec(function(data){
             if(success){
-                data = JSON.parse(data);
+                if(typeof data != "undefined"){
+                    //Already a JS Object
+                }else{
+                    //Try parsing the JSON
+                    try {
+                        data = JSON.parse(data);
+                    }
+                    catch(err) {
+                        data = "JSON Parse Error";
+                    }
+                }                
                 success(data);
             }
         }, error, "ParkingDetector", "initPlugin", [showMessages, maxPrompts, endpoint]);
@@ -68,7 +78,17 @@ window.parkingDetector = {
     getDetectorStatus: function(success, error) {
         exec(function(data){
             if(success){
-                data = JSON.parse(data);
+                if(typeof data != "undefined"){
+                    //Already a JS Object
+                }else{
+                    //Try parsing the JSON
+                    try {
+                        data = JSON.parse(data);
+                    }
+                    catch(err) {
+                        data = "JSON Parse Error";
+                    }
+                }                
                 success(data);
             }
         }, error, "ParkingDetector", "getDetectorStatus", []);
