@@ -1,27 +1,24 @@
 package cordova.plugin.parking.detector;
 
 import android.Manifest;
-import android.app.Activity;
-import android.app.AlertDialog;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.bluetooth.BluetoothAdapter;
 import android.bluetooth.BluetoothDevice;
+import android.bluetooth.BluetoothHeadset;
+import android.bluetooth.BluetoothProfile;
 import android.content.BroadcastReceiver;
 import android.content.Context;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.location.Location;
 import android.os.Binder;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.DeadObjectException;
-import android.os.Handler;
 import android.os.IBinder;
-import android.os.Looper;
-import android.os.RemoteException;
 import android.preference.PreferenceManager;
 import android.provider.Settings;
 import android.support.v4.content.ContextCompat;
@@ -43,6 +40,7 @@ import org.json.JSONObject;
 
 import java.util.Date;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -72,7 +70,6 @@ public class ParkingDetectionService extends Service implements
     public static String curAudioPort = "No Valid Port";
     public static String initiatedBy;
     public static String[] geofences;
-    public static Handler mHandler;
     public static Context context;
 
     public static float lastParkLat;
@@ -93,6 +90,8 @@ public class ParkingDetectionService extends Service implements
     private static final String LOG_TAG = "SS Parking Detector";
     private static BluetoothAdapter bluetoothAdapter;
     public static Callbacks pd;
+    public static BluetoothHeadset mBluetoothHeadset;
+
 
     private final IBinder mBinder = new LocalBinder();
 
@@ -107,48 +106,49 @@ public class ParkingDetectionService extends Service implements
         return mBinder;
     }
 
+    private BluetoothProfile.ServiceListener mProfileListener = new BluetoothProfile.ServiceListener() {
+        public void onServiceConnected(int profile, BluetoothProfile proxy) {
+            if (profile == BluetoothProfile.HEADSET) {
+                mBluetoothHeadset = (BluetoothHeadset) proxy;
+                List<BluetoothDevice> devices = mBluetoothHeadset.getConnectedDevices();
+                for ( final BluetoothDevice dev : devices ) {
+                    Log.d(LOG_TAG, "C Port found: "+dev.getName());
+                    curAudioPort = dev.getName();
+                }
+                Log.i(LOCK_TAG,"");
+                if(devices.size() > 0 && askedForConformationCount < askedForConformationMax && pd != null) {
+                    askedForConformationCount += 1;
+                    SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+                    SharedPreferences.Editor editor=mPrefs.edit();
+                    editor.putInt("askedForConformationCount", askedForConformationCount);
+                    editor.commit();
+                    pd.confirmBluetoothDialog();
+                }
+            }
+        }
+        public void onServiceDisconnected(int profile) {
+            if (profile == BluetoothProfile.HEADSET) {
+                mBluetoothHeadset = null;
+            }
+        }
+    };
+
     public void registerClient(ParkingDetector pd){
         this.pd = (Callbacks)pd;
     }
-
+    public void unregisterClient(){
+        this.pd = null;
+    }
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
-        if (bluetoothAdapter == null) {
-            toastMessage("Bluetooth is not supported. Parking detector cannot start");
-        } else {
-            Log.d(LOG_TAG, "Bluetooth is supported");
-            //test if BT enabled
-            if (bluetoothAdapter.isEnabled()) {
-                if (mGoogleApiClient == null) {
-                    mGoogleApiClient = new GoogleApiClient.Builder(this)
-                            .addConnectionCallbacks(this)
-                            .addOnConnectionFailedListener(this)
-                            .addApi(ActivityRecognition.API)
-                            .addApi(LocationServices.API)
-                            .build();
-                }
-                if(!mGoogleApiClient.isConnected()){
-                    mGoogleApiClient.connect();
-                }
-                if(bluetoothTarget != ""){
-                    toastMessage("Starting validated parking detector");
-                }else{
-                    toastMessage("Starting invalidated parking detector");
-                }
-            } else {
-                toastMessage("Bluetooth is disabled. Parking detector cannot start");
-            }
-        }
-        return Service.START_NOT_STICKY;
+        return Service.START_STICKY;
     }
 
     @Override
     public void onCreate() {
         super.onCreate();
-        mHandler = new Handler();
         context = this;
-
+        bluetoothAdapter = BluetoothAdapter.getDefaultAdapter();
         userID = Settings.Secure.getString(this.getContentResolver(),
                 Settings.Secure.ANDROID_ID);
 
@@ -173,14 +173,22 @@ public class ParkingDetectionService extends Service implements
     }
     @Override
     public void onDestroy() {
-        super.onDestroy();
         ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                 mGoogleApiClient,
                 getActivityDetectionPendingIntent());
+
+        // finally Close proxy connection after use.
+        bluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
+        super.onDestroy();
     }
     @Override
     public void onConnected(Bundle bundle) {
         Log.d(LOG_TAG, "Connected to google services");
+
+        if(mBluetoothHeadset == null){
+            // Establish connection to the proxy.
+            bluetoothAdapter.getProfileProxy(context, mProfileListener, BluetoothProfile.HEADSET);
+        }
 
         // Register for broadcasts on BluetoothAdapter state change
         this.registerReceiver(mReceiver, new IntentFilter(BluetoothAdapter.ACTION_STATE_CHANGED));
@@ -212,6 +220,38 @@ public class ParkingDetectionService extends Service implements
     public void onConnectionSuspended(int i) {
         Log.d(LOG_TAG, "GoogleApiClient connection has been suspend. Trying to reconnect");
         mGoogleApiClient.connect();
+    }
+
+    public void startParkingDetector(){
+        if(!isPDEnabled){
+            toastMessage("Parking detector is disabled");
+            return;
+        } else if (bluetoothAdapter == null) {
+            toastMessage("Bluetooth is not supported. Parking detector cannot start");
+        } else {
+            Log.d(LOG_TAG, "Bluetooth is supported");
+            //test if BT enabled
+            if (bluetoothAdapter.isEnabled()) {
+                if (mGoogleApiClient == null) {
+                    mGoogleApiClient = new GoogleApiClient.Builder(this)
+                            .addConnectionCallbacks(this)
+                            .addOnConnectionFailedListener(this)
+                            .addApi(ActivityRecognition.API)
+                            .addApi(LocationServices.API)
+                            .build();
+                }
+                if(!mGoogleApiClient.isConnected()){
+                    mGoogleApiClient.connect();
+                }
+                if(bluetoothTarget != ""){
+                    toastMessage("Starting validated parking detector");
+                }else{
+                    toastMessage("Starting invalidated parking detector");
+                }
+            } else {
+                toastMessage("Bluetooth is disabled. Parking detector cannot start");
+            }
+        }
     }
 
     private PendingIntent getActivityDetectionPendingIntent() {
@@ -275,7 +315,12 @@ public class ParkingDetectionService extends Service implements
             Log.d(LOG_TAG, "Most likely: "+ getNameFromType(mostLikelyActivityType));
 
             if (currentTransportationMode != mostLikelyActivityType && DetectedActivity.UNKNOWN != mostLikelyActivityType) {
-                prevTransportationMode = currentTransportationMode;
+                if(((mostLikelyActivityType == DetectedActivity.ON_FOOT || mostLikelyActivityType == DetectedActivity.STILL)
+                        && currentTransportationMode == DetectedActivity.IN_VEHICLE) ||
+                        ((currentTransportationMode == DetectedActivity.ON_FOOT || currentTransportationMode == DetectedActivity.STILL)
+                                && mostLikelyActivityType == DetectedActivity.IN_VEHICLE)){
+                    prevTransportationMode = currentTransportationMode;
+                }
                 currentTransportationMode = mostLikelyActivityType;
             }
             //Make sure its been at least 5 seconds since bt connect / disconnect. This will help filter out lost connections
@@ -290,12 +335,6 @@ public class ParkingDetectionService extends Service implements
         @Override
         public void onReceive(Context context, Intent intent) {
             String action = intent.getAction();
-            /*if (BluetoothAdapter.getDefaultAdapter().isEnabled()) {
-                Set<BluetoothDevice> btSet = BluetoothAdapter.getDefaultAdapter().getBondedDevices();
-                for(BluetoothDevice device: btSet){
-                    BluetoothAdapter.getDefaultAdapter()
-                }
-            }*/
             int eventCode = Constants.OUTCOME_NONE;
 
             if (action.equals(BluetoothAdapter.ACTION_STATE_CHANGED)) {
@@ -311,20 +350,28 @@ public class ParkingDetectionService extends Service implements
             }
             else if (BluetoothDevice.ACTION_ACL_DISCONNECTED.equals(action) || BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
                 BluetoothDevice device = intent.getParcelableExtra(BluetoothDevice.EXTRA_DEVICE);
-                if(btVerificed && !device.getName().equals(bluetoothTarget)){
-                    //Do nothing, not car
+                if(BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)){
+                    curAudioPort = device.getName();
                 }
+                if(!isPDEnabled){
+                    Log.d(LOG_TAG, "Ignoring change: PD disabled");
+                    return;
+                }
+                if(btVerificed && !device.getName().equals(bluetoothTarget)){
+                    Log.d(LOG_TAG, "Ignoring non-car bluetooth change 1");
+                    return;
+                }
+                if (!notCarSet.isEmpty() && notCarSet.contains(device.getName())) {
+                    Log.d(LOG_TAG, "Ignoring non-car bluetooth change 2");
+                    return;
+                }
+                //Start new decection sequence
                 pendingBTDetection = null;
                 long curTime = System.currentTimeMillis() / 1000;
-                Log.d(LOG_TAG, "Not car set: " + notCarSet.toString() + " device: " + device.getName());
-                if (!notCarSet.isEmpty() && notCarSet.contains(device.getName())) {
-                    Log.d(LOG_TAG, "Ignoring non-car bluetooth change");
-                }
                 //else if (curTime - lastStatusChangeTime > Constants.STATUS_CHANGE_INTERVAL_THRESHOLD && pendingBTDetection == null) {
                 lastBluetoothName = device.getName();
                 //Log.d(LOG_TAG, "Passed parking status time check");
                 if (BluetoothDevice.ACTION_ACL_CONNECTED.equals(action)) {
-                    curAudioPort = lastBluetoothName;
                     eventCode = Constants.OUTCOME_UNPARKING;
                     if (lastBluetoothName.equals(bluetoothTarget)) {
                         toastMessage("bluetooth connected to car");
@@ -371,32 +418,34 @@ public class ParkingDetectionService extends Service implements
     };
 
     public void countdown(){
-        if(pendingBTDetection != null) {
-            int cd = 60 - pendingBTDetection.timeSince();
+        if(pendingBTDetection != null && isPDEnabled) {
+            int cd = 90 - pendingBTDetection.timeSince();
             String activityString = "";
-            if(cd >= 0){
-                if(mostLikelyActivity != null && !mostLikelyActivity.equals("")){
-                    activityString = "\r\nLast Activity: " + mostLikelyActivity;
+            if(80 >= cd) {
+                if (mostLikelyActivity != null && !mostLikelyActivity.equals("")) {
+                    activityString = "<br>Last Activity: " + mostLikelyActivity;
                 }
                 if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && mostLikelyActivity != "in_vehicle") {
                     toastMessage("Waiting for vehicle to begin driving: " + cd + activityString);
-                } else if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity == "in_vehicle") {
+                } else if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity == "in_vehicle") {
                     toastMessage("Waiting for vehicle to stop: " + cd + activityString);
-                }else if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity != "on_foot") {
+                } else if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity != "on_foot") {
                     toastMessage("Waiting for driver to begin walking: " + cd + activityString);
                 }
+            }
+            if(cd >= 0){
                 new android.os.Handler().postDelayed(
                         new Runnable() {
                             public void run() {
                                 countdown();
                             }
                         },
-                        5000);
+                        10000);
             }else{
                 if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
-                    toastMessage("Stoping. No spot detected");
+                    toastMessage("Stopping. No spot detected");
                 }else if(mostLikelyActivity != null) {
-                    toastMessage("Stoping. Parking not detected");
+                    toastMessage("Stopping. Parking not detected");
                 }
                 pendingBTDetection = null;
                 ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
@@ -417,52 +466,23 @@ public class ParkingDetectionService extends Service implements
         @Override
         public void onLocationChanged(Location location) {
             Log.d(LOG_TAG, "IN ON LOCATION CHANGE, lat=" + location.getLatitude() + ", lon=" + location.getLongitude());
+            if(!isPDEnabled){
+                return;
+            }
             pendingBTDetection = new BTPendingDetection(eventCode, location);
             countdown();
             if(btVerificed){
                 //Do nothing
             }
-            else if(askedForConformationCount < askedForConformationMax) {
+            else if(!curAudioPort.equals("No Valid Port") && askedForConformationCount < askedForConformationMax) {
                 askedForConformationCount += 1;
                 SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
                 SharedPreferences.Editor editor=mPrefs.edit();
                 editor.putInt("askedForConformationCount", askedForConformationCount);
                 editor.commit();
-                mHandler.post(new Runnable() {
-                    public void run() {
-                        AlertDialog.Builder confirmBT = new AlertDialog.Builder(context.getApplicationContext())
-                                .setMessage("Is " + lastBluetoothName + " your car's bluetooth?")
-                                .setPositiveButton("yes", new DialogInterface.OnClickListener() {
-                                    public void onClick(DialogInterface dialog, int id) {
-                                        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
-                                        SharedPreferences.Editor editor = mPrefs.edit();
-                                        ParkingDetectionService.bluetoothTarget = ParkingDetectionService.lastBluetoothName;
-                                        ParkingDetectionService.btVerificed = true;
-                                        editor.putString("bluetoothTarget", ParkingDetectionService.bluetoothTarget);
-                                        editor.putBoolean("btVerificed", ParkingDetectionService.btVerificed);
-                                        editor.commit();
-                                        Log.d(LOG_TAG, "Bluetooth target identified " + ParkingDetectionService.bluetoothTarget);
-                                    }
-                                })
-                                .setNegativeButton("no", new DialogInterface.OnClickListener() {
-                                    public void onClick(DialogInterface dialog, int id) {
-                                        pendingBTDetection = null;
-                                        Log.d(LOG_TAG, "Remove updates - 2");
-                                        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
-                                                mGoogleApiClient,
-                                                getActivityDetectionPendingIntent());
-                                        notCarSet.add(ParkingDetectionService.lastBluetoothName);
-                                        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
-                                        SharedPreferences.Editor editor = mPrefs.edit();
-                                        editor.putStringSet("notCarSet", ParkingDetectionService.notCarSet);
-                                        editor.commit();
-                                        Log.d(LOG_TAG, "Bluetooth " + ParkingDetectionService.lastBluetoothName + " added to not car list");
-                                    }
-                                });
-                        AlertDialog alertDialog = confirmBT.create();
-                        alertDialog.show();
-                    }
-                });
+                if(pd != null){
+                    pd.confirmBluetoothDialog();
+                }
             }else if(askedForConformationCount < askedForConformationMax){
                 Log.d(LOG_TAG,"Max conformation count reached, no dialog");
             }
@@ -473,30 +493,24 @@ public class ParkingDetectionService extends Service implements
         Log.d(LOG_TAG, "in validate parking");
         if(eventCode == Constants.OUTCOME_UNPARKING){
             Log.d(LOG_TAG, "In unparking");
-            if (currentTransportationMode == DetectedActivity.IN_VEHICLE) {
+            if (currentTransportationMode == DetectedActivity.IN_VEHICLE && (prevTransportationMode != DetectedActivity.UNKNOWN || btVerificed)) {
                 //Looks like we've got an open spot!!!
                 actionsOnBTDetection(eventCode, location, null);
-            } else {
-
             }
         }else{
             Log.d(LOG_TAG, "In parking");
-            if (currentTransportationMode == DetectedActivity.ON_FOOT || lastBluetoothName.equals(bluetoothTarget)) {
+            if ((currentTransportationMode == DetectedActivity.ON_FOOT ||currentTransportationMode == DetectedActivity.STILL ) && (prevTransportationMode != DetectedActivity.UNKNOWN || btVerificed)) {
                 actionsOnBTDetection(eventCode, location, null);
-            } else {
-
             }
         }
     }
 
-    // actions taken when a parking/unparking event is detected and the location of the event is retrieved
     private void actionsOnBTDetection(int eventCode, Location location, String address){
         if(pendingBTDetection != null) {
             pendingBTDetection = null;
             long curTime = System.currentTimeMillis() / 1000;
             lastStatusChangeTime = curTime;
             //Stop activity listener
-            Log.d(LOG_TAG, "Remove updates - 3");
 
             ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                     mGoogleApiClient,
@@ -514,6 +528,7 @@ public class ParkingDetectionService extends Service implements
         SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID, endpoint, initiatedBy, version);
         sendPark.execute();
         isParked = true;
+        pendingBTDetection = null;
         if(pd != null){
             pd.parkedEvent(location);
         }
@@ -524,6 +539,7 @@ public class ParkingDetectionService extends Service implements
         SendParkReport sendDePark = new SendParkReport(location, 1, lastBluetoothName, btVerificed, userID, endpoint, initiatedBy, version);
         sendDePark.execute();
         isParked = false;
+        pendingBTDetection = null;
         if(pd != null){
             pd.deparkedEvent(location);
         }
@@ -555,6 +571,12 @@ public class ParkingDetectionService extends Service implements
             isBkLocEnabled = false;
             isActivityEnabled = false;
         }
+        if (BluetoothAdapter.getDefaultAdapter().isEnabled() && mBluetoothHeadset != null){
+            List<BluetoothDevice> devices = mBluetoothHeadset.getConnectedDevices();
+            for ( final BluetoothDevice dev : devices ){
+                curAudioPort = dev.getName();
+            }
+        }
         try {
             settings.put("isPDEnabled",isPDEnabled);
             settings.put("isBkLocEnabled",isBkLocEnabled);
@@ -575,9 +597,50 @@ public class ParkingDetectionService extends Service implements
         return settings;
     }
 
+    public static void disableParkingDetector(){
+        isPDEnabled = false;
+        pendingBTDetection = null;
+        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = mPrefs.edit();
+        editor.putBoolean("isPDEnabled", isPDEnabled);
+        editor.commit();
+
+    }
+    public static void enableParkingDetector(){
+        isPDEnabled = true;
+        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = mPrefs.edit();
+        editor.putBoolean("isPDEnabled", isPDEnabled);
+        editor.commit();
+
+    }
+    public static void confirmAudioPort(){
+        btVerificed = true;
+        bluetoothTarget = curAudioPort;
+        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = mPrefs.edit();
+        editor.putString("bluetoothTarget", bluetoothTarget);
+        editor.putBoolean("btVerificed", btVerificed);
+        editor.commit();
+    }
+    public static void resetBluetooth(){
+        askedForConformationCount = 0;
+        btVerificed = false;
+        bluetoothTarget = "";
+        pendingBTDetection = null;
+        notCarSet = new HashSet<String>();
+        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+        SharedPreferences.Editor editor = mPrefs.edit();
+        editor.putInt("askedForConformationCount", askedForConformationCount);
+        editor.putStringSet("notCarSet", notCarSet);
+        editor.putString("bluetoothTarget", bluetoothTarget);
+        editor.putBoolean("btVerificed", btVerificed);
+        editor.commit();
+    }
+
     public static void saveLastPark(Location loc) {
         SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
-        SharedPreferences.Editor editor=mPrefs.edit();
+        SharedPreferences.Editor editor = mPrefs.edit();
         lastParkLat = (float) loc.getLatitude();
         lastParkLng = (float) loc.getLongitude();
         lastParkDate = new Date().getTime();
@@ -603,6 +666,7 @@ public class ParkingDetectionService extends Service implements
         public void updateMessage(String message);
         public void parkedEvent(Location location);
         public void deparkedEvent(Location location);
+        public void confirmBluetoothDialog();
     }
     public static void toastMessage(final String message) {
         if(pd != null){

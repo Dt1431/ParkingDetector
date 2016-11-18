@@ -1,13 +1,18 @@
 package cordova.plugin.parking.detector;
+import android.app.AlertDialog;
 import android.content.ComponentName;
 import android.content.Context;
+import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.ServiceConnection;
 import android.os.Binder;
 import android.os.IBinder;
 import android.content.SharedPreferences;
 import android.location.Location;
+import android.preference.PreferenceManager;
 import android.util.Log;
+
+import com.google.android.gms.location.ActivityRecognition;
 
 import org.apache.cordova.CordovaInterface;
 import org.apache.cordova.CordovaPlugin;
@@ -29,7 +34,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     public static CordovaInterface mcordova;
     private static ParkingDetectionService mParkingDetectionService;
     private static final String LOG_TAG = "SS Parking Detector";
-    boolean mBound = false;
+    private static boolean mBound = false;
     Intent parkingDetectionIntent;
 
     @Override
@@ -41,24 +46,28 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     }
     @Override
     public void onDestroy(){
-        cordova.getActivity().startService(parkingDetectionIntent);
-        cordova.getActivity().getApplicationContext().unbindService(mConnection);
+        if(mBound){
+            mParkingDetectionService.unregisterClient();
+            cordova.getActivity().unbindService(mConnection);
+        }
+        super.onDestroy();
     }
-
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
-        SharedPreferences mPrefs = cordova.getActivity().getPreferences(Context.MODE_PRIVATE);
-        SharedPreferences.Editor editor = mPrefs.edit();
-
         if(action.equals("initPlugin")) {
+            SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(cordova.getActivity());
+            SharedPreferences.Editor editor = mPrefs.edit();
             ParkingDetectionService.showMessages = args.getBoolean(0);
             ParkingDetectionService.askedForConformationMax = args.getInt(1);
             ParkingDetectionService.endpoint = args.getString(2);
-            cordova.getActivity().startService(parkingDetectionIntent);
-            cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
+            if(!mBound){
+                cordova.getActivity().startService(parkingDetectionIntent);
+                mBound = cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
+            }
             JSONObject result = ParkingDetectionService.buildSettingsJSON();
             callbackContext.success(result);
             return true;
+
         }else if(action.equals("userInitiatedPark")) {
             double userLat = args.getDouble(0);
             double userLng = args.getDouble(1);
@@ -66,6 +75,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             location.setLatitude(userLat);
             location.setLongitude(userLng);
             ParkingDetectionService.parkingDetected(location, "user");
+
         }else if(action.equals("userInitiatedDepark")) {
             double userLat = args.getDouble(0);
             double userLng = args.getDouble(1);
@@ -73,48 +83,48 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             location.setLatitude(userLat);
             location.setLongitude(userLng);
             ParkingDetectionService.deparkingDetected(location, "user");
+
         }else if(action.equals("resetBluetooth")) {
-            ParkingDetectionService.askedForConformationCount = 0;
-            ParkingDetectionService.btVerificed = false;
-            ParkingDetectionService.bluetoothTarget = "";
-            ParkingDetectionService.notCarSet = new HashSet<String>();
-            editor.putInt("askedForConformationCount", ParkingDetectionService.askedForConformationCount);
-            editor.putStringSet("notCarSet", ParkingDetectionService.notCarSet);
-            editor.putString("bluetoothTarget", ParkingDetectionService.bluetoothTarget);
-            editor.putBoolean("btVerificed", ParkingDetectionService.btVerificed);
-            editor.commit();
+            ParkingDetectionService.resetBluetooth();
             callbackContext.success();
             return true;
+
         }else if(action.equals("startParkingDetector")) {
-            cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
-            cordova.getActivity().startService(parkingDetectionIntent);
+            if(!mBound){
+                cordova.getActivity().startService(parkingDetectionIntent);
+                mBound = cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
+            }else{
+                mParkingDetectionService.startParkingDetector();
+            }
             callbackContext.success();
             return true;
+
         }else if(action.equals("disableParkingDetector")) {
-            cordova.getActivity().unbindService(mConnection);
-            ParkingDetectionService.isPDEnabled = false;
-            editor.putBoolean("isPDEnabled", ParkingDetectionService.isPDEnabled);
-            editor.commit();
+            ParkingDetectionService.disableParkingDetector();
+            if(mBound){
+                mBound = false;
+                mParkingDetectionService.unregisterClient();
+                cordova.getActivity().unbindService(mConnection);
+            }
             callbackContext.success();
             return true;
+
         }else if(action.equals("enableParkingDetector")) {
-            cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
-            cordova.getActivity().startService(parkingDetectionIntent);
-            ParkingDetectionService.isPDEnabled = true;
-            editor.putBoolean("isPDEnabled", ParkingDetectionService.isPDEnabled);
-            editor.commit();
-            cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
-            cordova.getActivity().startService(parkingDetectionIntent);
+            ParkingDetectionService.enableParkingDetector();
+            if(!mBound){
+                cordova.getActivity().startService(parkingDetectionIntent);
+                mBound = cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
+            }else{
+                mParkingDetectionService.startParkingDetector();
+            }
             callbackContext.success();
             return true;
+
         }else if(action.equals("confirmAudioPort")) {
-            ParkingDetectionService.btVerificed = true;
-            ParkingDetectionService.bluetoothTarget = ParkingDetectionService.curAudioPort;
-            editor.putString("bluetoothTarget", ParkingDetectionService.bluetoothTarget);
-            editor.putBoolean("btVerificed", ParkingDetectionService.btVerificed);
-            editor.commit();
+            ParkingDetectionService.confirmAudioPort();
             callbackContext.success();
             return true;
+
         }else if(action.equals("getDetectorStatus")) {
             JSONObject result = ParkingDetectionService.buildSettingsJSON();
             callbackContext.success(result);
@@ -123,6 +133,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
         return false;
     }
 
+    /* Callbacks for ParkingDetectionService */
 
     private ServiceConnection mConnection = new ServiceConnection() {
 
@@ -134,19 +145,21 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             ParkingDetectionService.LocalBinder binder = (ParkingDetectionService.LocalBinder) service;
             mParkingDetectionService  = binder.getService();
             mParkingDetectionService.registerClient(ParkingDetector.this);
+            //Start parking detector
+            mParkingDetectionService.startParkingDetector();
             mBound = true;
         }
 
         @Override
         public void onServiceDisconnected(ComponentName arg0) {
             mBound = false;
+            mParkingDetectionService.unregisterClient();
             Log.d(LOG_TAG, "Disconnected from Parking Detection Service");
         }
     };
 
     @Override
     public void updateMessage(String message){
-        Log.d(LOG_TAG, "Update message called");
         final String js = "javascript:setTimeout(function(){window.parkingDetector.messageReceiver('" + message +  "');}, 0);";
         if (message != null && message.length() > 0) {
             if(!ParkingDetectionService.showMessages){
@@ -160,6 +173,42 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
                 }
             });
         }
+    }
+    @Override
+    public void confirmBluetoothDialog(){
+        mcordova.getActivity().runOnUiThread(new Runnable() {
+            public void run() {
+                AlertDialog.Builder confirmBT = new AlertDialog.Builder(mcordova.getActivity())
+                        .setMessage("Is " + ParkingDetectionService.curAudioPort + " your car's bluetooth?")
+                        .setPositiveButton("yes", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int id) {
+                                SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(mcordova.getActivity());
+                                SharedPreferences.Editor editor = mPrefs.edit();
+                                ParkingDetectionService.bluetoothTarget = ParkingDetectionService.curAudioPort;
+                                ParkingDetectionService.btVerificed = true;
+                                editor.putString("bluetoothTarget", ParkingDetectionService.bluetoothTarget);
+                                editor.putBoolean("btVerificed", ParkingDetectionService.btVerificed);
+                                editor.commit();
+                                Log.d(LOG_TAG, "Bluetooth target identified " + ParkingDetectionService.bluetoothTarget);
+                            }
+                        })
+                        .setNegativeButton("no", new DialogInterface.OnClickListener() {
+                            public void onClick(DialogInterface dialog, int id) {
+                                ParkingDetectionService.pendingBTDetection = null;
+                                Log.d(LOG_TAG, "Remove updates - 2");
+                                ParkingDetectionService.notCarSet.add(ParkingDetectionService.curAudioPort);
+                                SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(mcordova.getActivity());
+                                SharedPreferences.Editor editor = mPrefs.edit();
+                                editor.putStringSet("notCarSet", ParkingDetectionService.notCarSet);
+                                editor.commit();
+                                ParkingDetectionService.pendingBTDetection = null;
+                                Log.d(LOG_TAG, "Bluetooth " + ParkingDetectionService.lastBluetoothName + " added to not car list");
+                            }
+                        });
+                AlertDialog alertDialog = confirmBT.create();
+                alertDialog.show();
+            }
+        });
     }
     @Override
     public void parkedEvent(Location location){
