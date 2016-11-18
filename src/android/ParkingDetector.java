@@ -214,8 +214,9 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     public void parkedEvent(Location location){
         JSONObject parkedEvent = new JSONObject();
         try {
-            parkedEvent.put("lat", location.getLatitude());
-            parkedEvent.put("lng", location.getLongitude());
+
+            parkedEvent.put("lastParkLat", location.getLatitude());
+            parkedEvent.put("lastParkLng", location.getLongitude());
             parkedEvent.put("eventType","park");
         }catch (JSONException e) {
 
@@ -231,8 +232,8 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     public void deparkedEvent(Location location){
         JSONObject parkedEvent = new JSONObject();
         try {
-            parkedEvent.put("lat", location.getLatitude());
-            parkedEvent.put("lng", location.getLongitude());
+            parkedEvent.put("lastParkLat", location.getLatitude());
+            parkedEvent.put("lastParkLng", location.getLongitude());
             parkedEvent.put("eventType","depark");
         }catch (JSONException e) {
 

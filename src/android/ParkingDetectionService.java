@@ -54,6 +54,7 @@ public class ParkingDetectionService extends Service implements
     public static String lastBluetoothName = "";
     public static String bluetoothTarget = "";
     public static String mostLikelyActivity = "";
+    public static int mostLikelyActivityType;
     public static Set<String> notCarSet = new HashSet<String>();
     public static int activityCounter = 0;
     public static int activityCountMax = 20;
@@ -75,6 +76,7 @@ public class ParkingDetectionService extends Service implements
     public static float lastParkLat;
     public static float lastParkLng;
     public static long lastParkDate;
+    public static boolean countdownCalled = false;
 
     protected LocationRequest mLocationRequest;
     public static String userID;
@@ -267,22 +269,8 @@ public class ParkingDetectionService extends Service implements
             activityCounter += 1;
             Log.d(LOG_TAG, "Activity counter: "+activityCounter);
 
-
-            //Don't think this is ever called now that we've added countdown
-            if(pendingBTDetection != null && activityCountMax <= activityCounter){
-                if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
-                    toastMessage("Stoping. No spot detected");
-                }else if(mostLikelyActivity != null){
-                    toastMessage("Stoping. Parking not detected");
-                }
-                pendingBTDetection = null;
-                ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
-                        mGoogleApiClient,
-                        getActivityDetectionPendingIntent());
-            }
             // Get the update
             ActivityRecognitionResult result = intent.getParcelableExtra(Constants.ACTIVITY_EXTRA);
-
 
             // Get the most probable activity from the list of activities in the update
             DetectedActivity mostProbableActivity = result.getMostProbableActivity();
@@ -292,8 +280,7 @@ public class ParkingDetectionService extends Service implements
             float onFootConfidence = result.getActivityConfidence(DetectedActivity.ON_FOOT);
             float inVehicleConfidence = result.getActivityConfidence(DetectedActivity.IN_VEHICLE);
             float stillConfidence = result.getActivityConfidence(DetectedActivity.STILL);
-            int mostLikelyActivityType = mostProbableActivity.getType();
-            mostLikelyActivity = getNameFromType(mostLikelyActivityType);
+            mostLikelyActivityType = mostProbableActivity.getType();
 
             if (mostLikelyActivityType == DetectedActivity.ON_FOOT
                     || mostLikelyActivityType == DetectedActivity.IN_VEHICLE
@@ -308,6 +295,7 @@ public class ParkingDetectionService extends Service implements
             }else{
                 mostLikelyActivityType = DetectedActivity.UNKNOWN;
             }
+            mostLikelyActivity = getNameFromType(mostLikelyActivityType);
 
             Log.d(LOG_TAG, "On Foot: "+ onFootConfidence);
             Log.d(LOG_TAG, "In Vehicle: "+ inVehicleConfidence);
@@ -418,29 +406,29 @@ public class ParkingDetectionService extends Service implements
     };
 
     public void countdown(){
+        int cdTimeOut = 10000;
         if(pendingBTDetection != null && isPDEnabled) {
             int cd = 90 - pendingBTDetection.timeSince();
             String activityString = "";
-            if(80 >= cd) {
+            if(cd >= 85){
+                cdTimeOut = 1000;
+            }
+            else if(cd >= 0) {
                 if (mostLikelyActivity != null && !mostLikelyActivity.equals("")) {
                     activityString = "<br>Last Activity: " + mostLikelyActivity;
                 }
-                if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && mostLikelyActivity != "in_vehicle") {
+                if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
                     toastMessage("Waiting for vehicle to begin driving: " + cd + activityString);
-                } else if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity == "in_vehicle") {
+                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && !btVerificed && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
+                    toastMessage("No previous driving. Parking not detected");
+                    pendingBTDetection = null;
+                    return;
+                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode == DetectedActivity.IN_VEHICLE) {
                     toastMessage("Waiting for vehicle to stop: " + cd + activityString);
-                } else if (mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && mostLikelyActivity != "on_foot") {
-                    toastMessage("Waiting for driver to begin walking: " + cd + activityString);
                 }
-            }
-            if(cd >= 0){
-                new android.os.Handler().postDelayed(
-                        new Runnable() {
-                            public void run() {
-                                countdown();
-                            }
-                        },
-                        10000);
+                if(cd < 10){
+                    cdTimeOut = cd*100;
+                }
             }else{
                 if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
                     toastMessage("Stopping. No spot detected");
@@ -451,7 +439,15 @@ public class ParkingDetectionService extends Service implements
                 ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                         mGoogleApiClient,
                         getActivityDetectionPendingIntent());
+                return;
             }
+            new android.os.Handler().postDelayed(
+                new Runnable() {
+                    public void run() {
+                        countdown();
+                    }
+                },
+                cdTimeOut);
         }
     }
 
