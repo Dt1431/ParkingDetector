@@ -64,6 +64,9 @@
 			</array>
 		</config-file>
 		<source-file src="src/ios/ParkingDetector.m" />
+		<header-file src="src/ios/ParkingDetector.h" />
+		<source-file src="src/ios/ParkingDetectorService.m" />
+		<header-file src="src/ios/ParkingDetectorService.h" />
 		<source-file src="src/ios/MBProgressHUD.m" />
 		<header-file src="src/ios/MBProgressHUD.h" />
 

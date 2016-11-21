@@ -7,7 +7,7 @@ window.parkingDetector = {
     initParkingDetectorPlugin: function(showMessages, maxPrompts, endpoint, success, error) {
         exec(function(data){
             if(success){
-                if(typeof data != "undefined"){
+                if(typeof data.isPDEnabled != "undefined"){
                     //Already a JS Object
                 }else{
                     //Try parsing the JSON
@@ -78,7 +78,7 @@ window.parkingDetector = {
     getDetectorStatus: function(success, error) {
         exec(function(data){
             if(success){
-                if(typeof data != "undefined"){
+                if(typeof data.isPDEnabled != "undefined"){
                     //Already a JS Object
                 }else{
                     //Try parsing the JSON
