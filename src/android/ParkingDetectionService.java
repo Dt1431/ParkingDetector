@@ -64,7 +64,7 @@ public class ParkingDetectionService extends Service implements
     public static String endpoint = "http://streetsmartdemo.cloudapp.net/newParkingActivity";
     public static String version = "";
 
-    public static boolean btVerificed = false;
+    public static boolean isVerified = false;
     public static boolean isPDEnabled = true;
     public static boolean isActivityEnabled = false;
     public static boolean isBkLocEnabled = false;
@@ -87,7 +87,7 @@ public class ParkingDetectionService extends Service implements
     private static int prevTransportationMode = DetectedActivity.UNKNOWN;
 
     public static long lastStatusChangeTime = 0;
-    public static boolean showMessages = false;
+    public static String showMessages = "callback";
 
     private static final String LOG_TAG = "SS Parking Detector";
     private static BluetoothAdapter bluetoothAdapter;
@@ -157,7 +157,7 @@ public class ParkingDetectionService extends Service implements
         SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
         notCarSet = mPrefs.getStringSet("notCarSet", notCarSet);
         bluetoothTarget = mPrefs.getString("bluetoothTarget", "");
-        btVerificed = mPrefs.getBoolean("btVerificed", false);
+        isVerified = mPrefs.getBoolean("isVerified", false);
         askedForConformationCount = mPrefs.getInt("askedForConformationCount", 0);
         isPDEnabled = mPrefs.getBoolean("isPDEnabled", true);
         isBkLocEnabled = mPrefs.getBoolean("isBkLocEnabled", false);
@@ -345,7 +345,7 @@ public class ParkingDetectionService extends Service implements
                     Log.d(LOG_TAG, "Ignoring change: PD disabled");
                     return;
                 }
-                if(btVerificed && !device.getName().equals(bluetoothTarget)){
+                if(isVerified && !device.getName().equals(bluetoothTarget)){
                     Log.d(LOG_TAG, "Ignoring non-car bluetooth change 1");
                     return;
                 }
@@ -419,7 +419,7 @@ public class ParkingDetectionService extends Service implements
                 }
                 if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
                     toastMessage("Waiting for vehicle to begin driving: " + cd + activityString);
-                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && !btVerificed && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
+                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && !isVerified && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
                     toastMessage("No previous driving. Parking not detected");
                     pendingBTDetection = null;
                     return;
@@ -467,7 +467,7 @@ public class ParkingDetectionService extends Service implements
             }
             pendingBTDetection = new BTPendingDetection(eventCode, location);
             countdown();
-            if(btVerificed){
+            if(isVerified){
                 //Do nothing
             }
             else if(!curAudioPort.equals("No Valid Port") && askedForConformationCount < askedForConformationMax) {
@@ -489,13 +489,13 @@ public class ParkingDetectionService extends Service implements
         Log.d(LOG_TAG, "in validate parking");
         if(eventCode == Constants.OUTCOME_UNPARKING){
             Log.d(LOG_TAG, "In unparking");
-            if (currentTransportationMode == DetectedActivity.IN_VEHICLE && (prevTransportationMode != DetectedActivity.UNKNOWN || btVerificed)) {
+            if (currentTransportationMode == DetectedActivity.IN_VEHICLE && (prevTransportationMode != DetectedActivity.UNKNOWN || isVerified)) {
                 //Looks like we've got an open spot!!!
                 actionsOnBTDetection(eventCode, location, null);
             }
         }else{
             Log.d(LOG_TAG, "In parking");
-            if ((currentTransportationMode == DetectedActivity.ON_FOOT ||currentTransportationMode == DetectedActivity.STILL ) && (prevTransportationMode != DetectedActivity.UNKNOWN || btVerificed)) {
+            if ((currentTransportationMode == DetectedActivity.ON_FOOT ||currentTransportationMode == DetectedActivity.STILL ) && (prevTransportationMode != DetectedActivity.UNKNOWN || isVerified)) {
                 actionsOnBTDetection(eventCode, location, null);
             }
         }
@@ -521,7 +521,7 @@ public class ParkingDetectionService extends Service implements
     public static void parkingDetected(Location location, String initiatedBy){
         toastMessage("Parking detected");
         saveLastPark(location);
-        SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, btVerificed, userID, endpoint, initiatedBy, version);
+        SendParkReport sendPark = new SendParkReport(location, -1, lastBluetoothName, isVerified, userID, endpoint, initiatedBy, version);
         sendPark.execute();
         isParked = true;
         pendingBTDetection = null;
@@ -532,7 +532,7 @@ public class ParkingDetectionService extends Service implements
     public static void deparkingDetected(Location location, String initiatedBy){
         toastMessage("New space detected");
         clearLastPark();
-        SendParkReport sendDePark = new SendParkReport(location, 1, lastBluetoothName, btVerificed, userID, endpoint, initiatedBy, version);
+        SendParkReport sendDePark = new SendParkReport(location, 1, lastBluetoothName, isVerified, userID, endpoint, initiatedBy, version);
         sendDePark.execute();
         isParked = false;
         pendingBTDetection = null;
@@ -577,7 +577,7 @@ public class ParkingDetectionService extends Service implements
             settings.put("isPDEnabled",isPDEnabled);
             settings.put("isBkLocEnabled",isBkLocEnabled);
             settings.put("isActivityEnabled",isActivityEnabled);
-            settings.put("isBTVerified",btVerificed);
+            settings.put("isBTVerified",isVerified);
             settings.put("verifiedBT", bluetoothTarget);
             settings.put("curAudioPort",curAudioPort);
             settings.put("geofences",geofences);
@@ -611,17 +611,17 @@ public class ParkingDetectionService extends Service implements
 
     }
     public static void confirmAudioPort(){
-        btVerificed = true;
+        isVerified = true;
         bluetoothTarget = curAudioPort;
         SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = mPrefs.edit();
         editor.putString("bluetoothTarget", bluetoothTarget);
-        editor.putBoolean("btVerificed", btVerificed);
+        editor.putBoolean("isVerified", isVerified);
         editor.commit();
     }
     public static void resetBluetooth(){
         askedForConformationCount = 0;
-        btVerificed = false;
+        isVerified = false;
         bluetoothTarget = "";
         pendingBTDetection = null;
         notCarSet = new HashSet<String>();
@@ -630,7 +630,7 @@ public class ParkingDetectionService extends Service implements
         editor.putInt("askedForConformationCount", askedForConformationCount);
         editor.putStringSet("notCarSet", notCarSet);
         editor.putString("bluetoothTarget", bluetoothTarget);
-        editor.putBoolean("btVerificed", btVerificed);
+        editor.putBoolean("isVerified", isVerified);
         editor.commit();
     }
 

@@ -11,6 +11,7 @@ import android.content.SharedPreferences;
 import android.location.Location;
 import android.preference.PreferenceManager;
 import android.util.Log;
+import android.widget.Toast;
 
 import com.google.android.gms.location.ActivityRecognition;
 
@@ -57,7 +58,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
         if(action.equals("initPlugin")) {
             SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(cordova.getActivity());
             SharedPreferences.Editor editor = mPrefs.edit();
-            ParkingDetectionService.showMessages = args.getBoolean(0);
+            ParkingDetectionService.showMessages = args.getString(0);
             ParkingDetectionService.askedForConformationMax = args.getInt(1);
             ParkingDetectionService.endpoint = args.getString(2);
             if(!mBound){
@@ -161,17 +162,21 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     @Override
     public void updateMessage(String message){
         final String js = "javascript:setTimeout(function(){window.parkingDetector.messageReceiver('" + message +  "');}, 0);";
+        final String toastMessage = message;
         if (message != null && message.length() > 0) {
-            if(!ParkingDetectionService.showMessages){
+            if(ParkingDetectionService.showMessages.equals("log")){
                 Log.i(LOG_TAG,message);
-                return;
+            }else{
+                mcordova.getActivity().runOnUiThread(new Runnable() {
+                    public void run() {
+                        if(ParkingDetectionService.showMessages.equals("callback")){
+                            mwebView.loadUrl(js);
+                        }else if(ParkingDetectionService.showMessages.equals("overlay")){
+                            Toast.makeText(mcordova.getActivity(), toastMessage.replace("<br>","\r\n"), Toast.LENGTH_LONG).show();
+                        }
+                    }
+                });
             }
-            mcordova.getActivity().runOnUiThread(new Runnable() {
-                public void run() {
-                    mwebView.loadUrl(js);
-                    //Toast.makeText(context.getApplicationContext(), message, Toast.LENGTH_LONG).show();
-                }
-            });
         }
     }
     @Override
@@ -185,9 +190,9 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
                                 SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(mcordova.getActivity());
                                 SharedPreferences.Editor editor = mPrefs.edit();
                                 ParkingDetectionService.bluetoothTarget = ParkingDetectionService.curAudioPort;
-                                ParkingDetectionService.btVerificed = true;
+                                ParkingDetectionService.isVerified = true;
                                 editor.putString("bluetoothTarget", ParkingDetectionService.bluetoothTarget);
-                                editor.putBoolean("btVerificed", ParkingDetectionService.btVerificed);
+                                editor.putBoolean("isVerified", ParkingDetectionService.isVerified);
                                 editor.commit();
                                 Log.d(LOG_TAG, "Bluetooth target identified " + ParkingDetectionService.bluetoothTarget);
                             }

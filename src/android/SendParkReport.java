@@ -22,6 +22,7 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
     String initiatedBy;
     String version;
     boolean isVerified;
+    boolean activityVerified;
 
     SendParkReport(Location location, int activity, String curBT, boolean isVerified, String userId, String endpoint, String initiatedBy, String version){
         this.loc = location;
@@ -32,11 +33,13 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
         this.userId = userId;
         this.endpoint = endpoint;
         this.initiatedBy = initiatedBy;
+        this.activityVerified = true;
+        this.version = version;
         if(initiatedBy.equals("user")){
+            this.activityVerified = false;
             this.isVerified = false;
             this.curBT = "";
         }
-        this.version = version;
     }
 
     protected void onPreExecute(Void aVoid) {
@@ -63,7 +66,8 @@ public class SendParkReport extends AsyncTask<Void, Void, Void> {
             urlString.append(version);
             urlString.append("&initiatedBy=");
             urlString.append(initiatedBy);
-            urlString.append("&activityVerified=true");
+            urlString.append("&activityVerified=");
+            urlString.append(activityVerified);
 
             URL url = new URL(endpoint);
             HttpURLConnection connection = (HttpURLConnection) url.openConnection();

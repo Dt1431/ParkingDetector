@@ -1,10 +1,31 @@
 var exec = require('cordova/exec');
+var defaultShowMessages = "callback";
+var defaultMaxPrompts = 2;
+var defaultEndpoint = "http://streetsmartdemo.cloudapp.net/newParkingActivity";
 
 window.parkingDetector = {
     parkedCallback: function(data){},
     deparkedCallback: function(data){},
     messageReceiver: function(data){},
     initParkingDetectorPlugin: function(showMessages, maxPrompts, endpoint, success, error) {
+        if(typeof showMessages == "undefined"){
+            showMessages = defaultShowMessages;
+        }
+        else if(showMessages === true){
+            showMessages = "overlay";
+        }else if(showMessages === false){
+            showMessages = "log";
+        }else if(showMessages != "overlay" && showMessages != "log" && showMessages != "callback"){
+            showMessages = defaultShowMessages;
+        }
+        if(isNaN(maxPrompts)){
+            maxPrompts = defaultMaxPrompts;
+        }else{
+            maxPrompts = parseInt(maxPrompts);    
+        }
+        if(typeof endpoint == "undefined"){
+            endpoint = defaultEndpoint;
+        }
         exec(function(data){
             if(success){
                 if(typeof data.isPDEnabled != "undefined"){
@@ -96,4 +117,3 @@ window.parkingDetector = {
 };
 //For legacy purposes
 window.initParkingDetectorPlugin = parkingDetector.initParkingDetectorPlugin;
-
