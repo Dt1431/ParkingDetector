@@ -11,6 +11,7 @@
     //DT NOTE: Maybe use property instead? Think the additional overhead is insignificant
     CBCentralManager* centralManager;
     NSDate* lastDetectionDate;
+    NSDate* lastUpdateMessage;
     double userLat;
     double userLng;
     double userSpeed;
@@ -44,7 +45,7 @@
 }
 
 @property NSString* endpoint;
-@property NSNumber* showMessages;
+@property NSString* showMessages;
 @property int askedForConformationMax;
 @property NSString* curAudioPort;
 

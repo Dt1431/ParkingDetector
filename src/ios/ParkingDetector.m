@@ -106,7 +106,7 @@
 
 - (void)sendMessage:(NSNotification*)notification{
     NSString *message = [notification.userInfo valueForKey:@"message"];
-    if(parkingDetectorService.showMessages){
+    if([parkingDetectorService.showMessages isEqual: @"callback"]){
         [[NSOperationQueue mainQueue] addOperationWithBlock:^{
             NSString* jsString = [NSString stringWithFormat:@"setTimeout(function(){window.parkingDetector.messageReceiver(\"%@\");}, 0);",message];
             
@@ -114,10 +114,22 @@
                 [(UIWebView*)webView stringByEvaluatingJavaScriptFromString:jsString];
             }
             
-         }];
-         
-    }else{
+        }];
+        return;
+    }
+    message = [message stringByReplacingOccurrencesOfString:@"<br>" withString:@"\r\n"];
+    if([parkingDetectorService.showMessages isEqual: @"log"]){
         NSLog(@"SteetSmart Message: %@",message);
+    }else if([parkingDetectorService.showMessages isEqual: @"overlay"]){
+        [[NSOperationQueue mainQueue] addOperationWithBlock:^{
+            MBProgressHUD *hud = [MBProgressHUD showHUDAddedTo:self.webView.superview animated:YES];
+            // Configure for text only and offset down
+            hud.mode = MBProgressHUDModeText;
+            hud.detailsLabelText = message;
+            hud.margin = 10.f;
+            hud.removeFromSuperViewOnHide = YES;
+            [hud hideAnimated:YES afterDelay:3];
+        }];
     }
 
 }

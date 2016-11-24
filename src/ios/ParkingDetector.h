@@ -6,6 +6,7 @@
 #import <CoreLocation/CoreLocation.h>
 #import <CoreMotion/CoreMotion.h>
 #import <AVFoundation/AVFoundation.h>
+#import "MBProgressHUD.h"
 #import "ParkingDetectorService.h"
 
 @interface ParkingDetector : CDVPlugin {

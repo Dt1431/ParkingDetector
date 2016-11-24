@@ -89,6 +89,8 @@
         }
         [self loadAllGeofences];
         
+        lastUpdateMessage = [NSDate new];
+        lastUpdateMessage = [NSDate dateWithTimeInterval:-100 sinceDate:lastUpdateMessage];
         //Create background audio stream
         NSURL *url = [NSURL URLWithString:@"http://daveturner.tech/Level-up-sound-effect.mp3"];
         NSData *data = [NSData dataWithContentsOfURL:url];
@@ -216,7 +218,7 @@
 - (void)checkActivitiesBySpeed{
     NSLog(@"SSD - Check by Speed");
     if(!pendingDetection){
-        [self sendUpdateNotification: @"Stopping activity detection"];
+        //[self sendUpdateNotification: @"Stopping activity detection"];
         return;
     }
     NSDate *now = [NSDate new];
@@ -254,7 +256,7 @@
         else if(!isParking && userSpeed > 7){
             [self sendParkingEventToServer: 1 userInitiated:false];
         }else{
-            [self waitingForActivityCheck: [NSString stringWithFormat:@"Speed: %i mph. ", (int)(userSpeed/0.44704)]];
+            [self waitingForActivityCheck: [NSString stringWithFormat:@"Speed: %i mph. ", mphSpeed]];
         }
     }
 }
@@ -263,7 +265,7 @@
     NSLog(@"SSD - IN Past Activities");
     
     if([CMMotionActivityManager isActivityAvailable]){
-        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60*5]
+        [motionActivityManager queryActivityStartingFromDate:[NSDate dateWithTimeIntervalSinceNow:-60*10]
                                                       toDate:[NSDate new]
                                                      toQueue:[NSOperationQueue new]
                                                  withHandler:^(NSArray *activities, NSError *error) {
@@ -286,12 +288,10 @@
                                                          if((isParking || !isParkingKnown) && activity.confidence >= 1 && activity.automotive){
                                                              foundFirstActivity = YES;
                                                              isParking = YES;
-                                                             break;
                                                          }
                                                          if((!isParking || !isParkingKnown) && activity.confidence >= 1 && (activity.stationary || activity.walking)){
                                                              foundFirstActivity = YES;
                                                              isParking = NO;
-                                                             break;
                                                          }
                                                      }
                                                      //If parking / de-parking is partially validated, listen for future activities
@@ -331,10 +331,15 @@
 - (void)waitingForActivityCheck:(NSString*)curActivityDesc{
     NSDate *now = [NSDate new];
     int secs = (int)[now timeIntervalSinceDate:lastDetectionDate];
+    int secs2 = (int)[now timeIntervalSinceDate:lastUpdateMessage];
+    if(secs2 < 10){
+        return;
+    }
+    lastUpdateMessage = [NSDate new];
     if(isParking){
-        [self sendUpdateNotification: [NSString stringWithFormat:@"%@Waiting for car to stop. Countdown: %i", curActivityDesc, (120 - secs)]];
+        [self sendUpdateNotification: [NSString stringWithFormat:@"Waiting for car to stop. Countdown: %i<br>%@", (120 - secs), curActivityDesc]];
     }else{
-        [self sendUpdateNotification: [NSString stringWithFormat:@"%@Waiting for car to begin driving. Countdown: %i", curActivityDesc, (120 - secs)]];
+        [self sendUpdateNotification: [NSString stringWithFormat:@"Waiting for car to begin driving. Countdown: %i<br>%@",(120 - secs),  curActivityDesc]];
     }
 }
 
@@ -345,7 +350,7 @@
         //register for Coremotion notifications
         [motionActivityManager startActivityUpdatesToQueue:[NSOperationQueue mainQueue] withHandler:^(CMMotionActivity * activity){
             if(!pendingDetection){
-                [self sendUpdateNotification: @"Stopping activity detection"];
+                //[self sendUpdateNotification: @"Stopping activity detection"];
                 [motionActivityManager stopActivityUpdates];
                 return;
             }
@@ -576,7 +581,7 @@
     self.curAudioPort = [self getAudioPortName];
     
     if(![curBT isEqual: @"Not BT"]
-       && ![curBT isEqual: @"Not Valid Port"]
+       && ![self.curAudioPort isEqual: @"No Valid Port"]
        && isBTVerified != YES
        && conformationCount < self.askedForConformationMax
        && ![notCarAudio containsObject: self.curAudioPort]){
@@ -799,7 +804,7 @@
             self.curAudioPort = [self getAudioPortName];
             NSLog(@"SSD - portAfter - %@", self.curAudioPort);
 
-            if([self.curAudioPort isEqual: verifiedBT] || (![curBT isEqual: @"Not BT"] && ![notCarAudio containsObject: self.curAudioPort])){
+            if([self.curAudioPort isEqual: verifiedBT] || (![curBT isEqual: @"Not BT"] && ![notCarAudio containsObject: self.curAudioPort] && ![self.curAudioPort isEqual:@"No Valid Port"])){
                 if(pendingDetection){
                     pendingDetection = NO;
                     foundFirstActivity = NO;
