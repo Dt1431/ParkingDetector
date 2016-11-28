@@ -33,11 +33,14 @@
 		</config-file>
 		<config-file parent="/manifest/application" target="AndroidManifest.xml">
 			<service android:enabled="true" android:name="cordova.plugin.parking.detector.ActivityRecognitionIntentService" />
+			<service android:enabled="true" android:name="cordova.plugin.parking.detector.ParkingDetectionService" />
 		</config-file>
 		<source-file src="src/android/ParkingDetector.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/ParkingDetectionService.java" target-dir="src/cordova/plugin/parking/detector" />
 		<source-file src="src/android/BTPendingDetection.java" target-dir="src/cordova/plugin/parking/detector" />
 		<source-file src="src/android/ConditionalProbability.java" target-dir="src/cordova/plugin/parking/detector" />
-		<source-file src="src/android/Constants.java" target-dir="src/cordova/plugin/parking/detector" /><source-file src="src/android/SendParkReport.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/Constants.java" target-dir="src/cordova/plugin/parking/detector" />
+		<source-file src="src/android/SendParkReport.java" target-dir="src/cordova/plugin/parking/detector" />
 		<source-file src="src/android/ActivityRecognitionIntentService.java" target-dir="src/cordova/plugin/parking/detector" />
 		<source-file src="src/android/libs/commons-math3-3.6.1.jar" target-dir="libs" />
 	</platform>
