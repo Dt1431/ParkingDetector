@@ -30,10 +30,10 @@
         }
         if([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedAlways){
             isBkLocEnabled = 1;
-            //self.locationManager.allowsBackgroundLocationUpdates = YES;
+            self.locationManager.allowsBackgroundLocationUpdates = YES;
         }else{
             isBkLocEnabled = 0;
-            //self.locationManager.allowsBackgroundLocationUpdates = NO;
+            self.locationManager.allowsBackgroundLocationUpdates = NO;
         }
         [defaults setInteger:isBkLocEnabled forKey:@"pd_isBkLocEnabled"];
         
@@ -338,6 +338,9 @@
         return;
     }
     lastUpdateMessage = [NSDate new];
+    if((120 - secs) < 0){
+        return;
+    }
     if(isParking){
         [self sendUpdateNotification: [NSString stringWithFormat:@"Waiting for car to stop. Countdown: %i<br>%@", (120 - secs), curActivityDesc]];
     }else{
@@ -485,11 +488,11 @@
         if([CLLocationManager authorizationStatus]==kCLAuthorizationStatusDenied){
             [self sendUpdateNotification: @"Location Services are not permitted. Cannot determine parking spot location"];
             isBkLocEnabled = 0;
-            //self.locationManager.allowsBackgroundLocationUpdates = NO;
+            self.locationManager.allowsBackgroundLocationUpdates = NO;
         }else{
             if([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedAlways){
                 isBkLocEnabled = 1;
-                //self.locationManager.allowsBackgroundLocationUpdates = YES;
+                self.locationManager.allowsBackgroundLocationUpdates = YES;
             }
             else if([self.locationManager respondsToSelector:@selector(requestAlwaysAuthorization)]){
                 [self.locationManager requestAlwaysAuthorization];
