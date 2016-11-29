@@ -30,8 +30,10 @@
         }
         if([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedAlways){
             isBkLocEnabled = 1;
+            //self.locationManager.allowsBackgroundLocationUpdates = YES;
         }else{
             isBkLocEnabled = 0;
+            //self.locationManager.allowsBackgroundLocationUpdates = NO;
         }
         [defaults setInteger:isBkLocEnabled forKey:@"pd_isBkLocEnabled"];
         
@@ -71,7 +73,7 @@
             [defaults setObject:verifiedBT forKey:@"pd_verifiedBT"];
             [defaults synchronize];
         }
-        self.curAudioPort = @"";
+        self.curAudioPort = @"No Valid Port";
         curBT = @"";
         pendingDetection = NO;
         foundFirstActivity = NO;
@@ -483,9 +485,11 @@
         if([CLLocationManager authorizationStatus]==kCLAuthorizationStatusDenied){
             [self sendUpdateNotification: @"Location Services are not permitted. Cannot determine parking spot location"];
             isBkLocEnabled = 0;
+            //self.locationManager.allowsBackgroundLocationUpdates = NO;
         }else{
             if([CLLocationManager authorizationStatus] == kCLAuthorizationStatusAuthorizedAlways){
                 isBkLocEnabled = 1;
+                //self.locationManager.allowsBackgroundLocationUpdates = YES;
             }
             else if([self.locationManager respondsToSelector:@selector(requestAlwaysAuthorization)]){
                 [self.locationManager requestAlwaysAuthorization];
@@ -589,7 +593,7 @@
         [self sendAlertNotification:self.curAudioPort];
         
     }else{
-        if([self.curAudioPort isEqual: verifiedBT] || (![curBT isEqual: @"Not BT"] && ![notCarAudio containsObject: self.curAudioPort])){
+        if([self.curAudioPort isEqual: verifiedBT] || (![curBT isEqual: @"Not BT"] && ![self.curAudioPort isEqual: @"No Valid Port"] && ![notCarAudio containsObject: self.curAudioPort])){
             isParking = NO;
             isParkingKnown = YES;
             initiatedBy = @"PD start";

@@ -61,8 +61,7 @@
         </config-file>
 		<config-file target="*-Info.plist" parent="UIBackgroundModes">
 			<array>
-				<string>bluetooth-central</string>
-				<string>location-services</string>
+				<string>location</string>
 				<string>audio</string>				
 			</array>
 		</config-file>
