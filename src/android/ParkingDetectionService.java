@@ -58,13 +58,16 @@ public class ParkingDetectionService extends Service implements
     public static Set<String> notCarSet = new HashSet<String>();
     public static int activityCounter = 0;
     public static int activityCountMax = 20;
+    public static int activityRecognitionFrequency = 60000;
 
     public static int askedForConformationCount = 0;
     public static int askedForConformationMax = 0;
     public static String endpoint = "http://streetsmartdemo.cloudapp.net/newParkingActivity";
     public static String version = "";
 
+    private static boolean isGoogleLoading = false;
     public static boolean isVerified = false;
+    public static boolean firstTime = true;
     public static boolean isPDEnabled = true;
     public static boolean isActivityEnabled = false;
     public static boolean isBkLocEnabled = false;
@@ -72,7 +75,7 @@ public class ParkingDetectionService extends Service implements
     public static String initiatedBy;
     public static String[] geofences;
     public static Context context;
-
+    public static Location lastLocationProxy;
     public static float lastParkLat;
     public static float lastParkLng;
     public static long lastParkDate;
@@ -118,7 +121,7 @@ public class ParkingDetectionService extends Service implements
                     curAudioPort = dev.getName();
                 }
                 Log.i(LOCK_TAG,"");
-                if(devices.size() > 0 && askedForConformationCount < askedForConformationMax && pd != null) {
+                if(!isVerified && devices.size() > 0 && askedForConformationCount < askedForConformationMax && pd != null) {
                     askedForConformationCount += 1;
                     SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
                     SharedPreferences.Editor editor=mPrefs.edit();
@@ -165,6 +168,7 @@ public class ParkingDetectionService extends Service implements
         lastParkDate = mPrefs.getLong("lastParkDate",-9999);
         lastParkLat = mPrefs.getFloat("lastParkLat",-9999);
         lastParkLng = mPrefs.getFloat("lastParkLng",-9999);
+        firstTime  = mPrefs.getBoolean("firstTime", true);
 
         try{
             version = this.getPackageManager().getPackageInfo(this.getPackageName(), 0).versionName;
@@ -178,7 +182,7 @@ public class ParkingDetectionService extends Service implements
         ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                 mGoogleApiClient,
                 getActivityDetectionPendingIntent());
-
+        Log.i(LOG_TAG, "Stopping activity updates");
         // finally Close proxy connection after use.
         bluetoothAdapter.closeProfileProxy(BluetoothProfile.HEADSET, mBluetoothHeadset);
         super.onDestroy();
@@ -186,10 +190,29 @@ public class ParkingDetectionService extends Service implements
     @Override
     public void onConnected(Bundle bundle) {
         Log.d(LOG_TAG, "Connected to google services");
-
+        isGoogleLoading = false;
         if(mBluetoothHeadset == null){
             // Establish connection to the proxy.
             bluetoothAdapter.getProfileProxy(context, mProfileListener, BluetoothProfile.HEADSET);
+        }
+        //Start activity recognition updates if bt is not verified
+        if(!isVerified){
+            new android.os.Handler().postDelayed(
+                    new Runnable() {
+                        public void run() {
+                            ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                                    mGoogleApiClient,
+                                    getActivityDetectionPendingIntent());
+
+                            activityRecognitionFrequency = 10000; //
+                            Log.i(LOG_TAG, "Starting Activity Updates at Frequency: " + activityRecognitionFrequency);
+                            ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                                    mGoogleApiClient,
+                                    activityRecognitionFrequency,
+                                    getActivityDetectionPendingIntent());
+                        }
+                    },
+                    5000);
         }
 
         // Register for broadcasts on BluetoothAdapter state change
@@ -211,6 +234,9 @@ public class ParkingDetectionService extends Service implements
         //has a resolution, try sending an Intent to start a Google Play
         //services activity that can resolve error.
 
+        isGoogleLoading = false;
+        mGoogleApiClient = null;
+
         if (connectionResult.hasResolution()) {
 
             // If no resolution is available, display an error dialog
@@ -221,6 +247,7 @@ public class ParkingDetectionService extends Service implements
     @Override
     public void onConnectionSuspended(int i) {
         Log.d(LOG_TAG, "GoogleApiClient connection has been suspend. Trying to reconnect");
+        isGoogleLoading = true;
         mGoogleApiClient.connect();
     }
 
@@ -228,30 +255,34 @@ public class ParkingDetectionService extends Service implements
         if(!isPDEnabled){
             toastMessage("Parking detector is disabled");
             return;
-        } else if (bluetoothAdapter == null) {
-            toastMessage("Bluetooth is not supported. Parking detector cannot start");
-        } else {
-            Log.d(LOG_TAG, "Bluetooth is supported");
-            //test if BT enabled
-            if (bluetoothAdapter.isEnabled()) {
-                if (mGoogleApiClient == null) {
-                    mGoogleApiClient = new GoogleApiClient.Builder(this)
-                            .addConnectionCallbacks(this)
-                            .addOnConnectionFailedListener(this)
-                            .addApi(ActivityRecognition.API)
-                            .addApi(LocationServices.API)
-                            .build();
-                }
-                if(!mGoogleApiClient.isConnected()){
-                    mGoogleApiClient.connect();
-                }
-                if(bluetoothTarget != ""){
-                    toastMessage("Starting validated parking detector");
-                }else{
-                    toastMessage("Starting invalidated parking detector");
-                }
+        }
+        else {
+            if (mGoogleApiClient == null && !isGoogleLoading) {
+                isGoogleLoading = true;
+                mGoogleApiClient = new GoogleApiClient.Builder(this)
+                        .addConnectionCallbacks(this)
+                        .addOnConnectionFailedListener(this)
+                        .addApi(ActivityRecognition.API)
+                        .addApi(LocationServices.API)
+                        .build();
+            }
+            if(!mGoogleApiClient.isConnected()){
+                mGoogleApiClient.connect();
+            }
+            if (bluetoothAdapter == null) {
+                toastMessage("Bluetooth is not supported. Starting invalidated parking detector");
             } else {
-                toastMessage("Bluetooth is disabled. Parking detector cannot start");
+                Log.d(LOG_TAG, "Bluetooth is supported");
+                //test if BT enabled
+                if (bluetoothAdapter.isEnabled()) {
+                    if (bluetoothTarget != "") {
+                        toastMessage("Starting validated parking detector");
+                    } else {
+                        toastMessage("Starting invalidated parking detector");
+                    }
+                } else {
+                    toastMessage("Bluetooth is disabled. Starting invalidated parking detector");
+                }
             }
         }
     }
@@ -275,6 +306,7 @@ public class ParkingDetectionService extends Service implements
             // Get the most probable activity from the list of activities in the update
             DetectedActivity mostProbableActivity = result.getMostProbableActivity();
 
+            boolean didActivityChange = false;
             // Get the type of activity
             float mostLikelyActivityConfidence = mostProbableActivity.getConfidence();
             float onFootConfidence = result.getActivityConfidence(DetectedActivity.ON_FOOT);
@@ -302,18 +334,86 @@ public class ParkingDetectionService extends Service implements
             Log.d(LOG_TAG, "Still: "+ stillConfidence);
             Log.d(LOG_TAG, "Most likely: "+ getNameFromType(mostLikelyActivityType));
 
-            if (currentTransportationMode != mostLikelyActivityType && DetectedActivity.UNKNOWN != mostLikelyActivityType) {
-                if(((mostLikelyActivityType == DetectedActivity.ON_FOOT || mostLikelyActivityType == DetectedActivity.STILL)
-                        && currentTransportationMode == DetectedActivity.IN_VEHICLE) ||
-                        ((currentTransportationMode == DetectedActivity.ON_FOOT || currentTransportationMode == DetectedActivity.STILL)
-                                && mostLikelyActivityType == DetectedActivity.IN_VEHICLE)){
-                    prevTransportationMode = currentTransportationMode;
-                }
-                currentTransportationMode = mostLikelyActivityType;
-            }
             //Make sure its been at least 5 seconds since bt connect / disconnect. This will help filter out lost connections
             if(pendingBTDetection != null && pendingBTDetection.timeSince() > 5){
-                validateParking(pendingBTDetection.eventCode(), pendingBTDetection.location());
+                if (currentTransportationMode != mostLikelyActivityType && DetectedActivity.UNKNOWN != mostLikelyActivityType) {
+                    if(((mostLikelyActivityType == DetectedActivity.ON_FOOT || mostLikelyActivityType == DetectedActivity.STILL)
+                            && currentTransportationMode == DetectedActivity.IN_VEHICLE) ||
+                            ((currentTransportationMode == DetectedActivity.ON_FOOT || currentTransportationMode == DetectedActivity.STILL)
+                                    && mostLikelyActivityType == DetectedActivity.IN_VEHICLE)){
+                        prevTransportationMode = currentTransportationMode;
+                    }
+                    currentTransportationMode = mostLikelyActivityType;
+                }
+                int cd = 90 - pendingBTDetection.timeSince();
+                if(85 >= cd){
+                    validateParking(pendingBTDetection.eventCode(), pendingBTDetection.location());
+                }
+            }
+            else if(pendingBTDetection == null && !isVerified) {
+                Location curLocationProxy = null;
+                int newActivityRecognitionFrequency = 5*60000;
+                if (mostLikelyActivityType != DetectedActivity.UNKNOWN) {
+                    toastMessage(mostLikelyActivity + " detected");
+                }
+                if (DetectedActivity.UNKNOWN != mostLikelyActivityType) {
+
+                    curLocationProxy = LocationServices.FusedLocationApi.getLastLocation(mGoogleApiClient);
+                    if (mostLikelyActivityType == DetectedActivity.ON_FOOT && currentTransportationMode == DetectedActivity.IN_VEHICLE) {
+
+                        prevTransportationMode = currentTransportationMode;
+                        currentTransportationMode = mostLikelyActivityType;
+                        newActivityRecognitionFrequency = 60000;
+                        if (curLocationProxy != null) {
+                            lastLocationProxy = curLocationProxy;
+                        }
+                        if(lastParkLat != -9999 && lastParkLng != -9999){
+                            lastLocationProxy = new Location("Last Park");
+                            lastLocationProxy.setLatitude(lastParkLat);
+                            lastLocationProxy.setLongitude(lastParkLng);
+                        }
+                        if (lastLocationProxy != null) {
+                            parkingDetected(lastLocationProxy, "activity change");
+                        }
+
+                    }else if (mostLikelyActivityType == DetectedActivity.IN_VEHICLE && (currentTransportationMode == DetectedActivity.ON_FOOT || currentTransportationMode == DetectedActivity.STILL)) {
+
+                        currentTransportationMode = mostLikelyActivityType;
+                        prevTransportationMode = currentTransportationMode;
+                        if (curLocationProxy != null) {
+                            lastLocationProxy = curLocationProxy;
+                        }
+
+                        newActivityRecognitionFrequency = 10000;
+
+                        if (curLocationProxy != null) {
+                            parkingDetected(curLocationProxy, "activity change");
+                        }
+                    }else if (mostLikelyActivityType == DetectedActivity.IN_VEHICLE || currentTransportationMode == DetectedActivity.IN_VEHICLE) {
+                        currentTransportationMode = DetectedActivity.IN_VEHICLE;
+                        newActivityRecognitionFrequency = 10000;
+                    }else if (mostLikelyActivityType == DetectedActivity.ON_FOOT) {
+                        currentTransportationMode = mostLikelyActivityType;
+                        newActivityRecognitionFrequency = 30000;
+                    }else if (currentTransportationMode == DetectedActivity.STILL && mostLikelyActivityType == DetectedActivity.STILL) {
+                        newActivityRecognitionFrequency = 5*60000;
+                    }else{
+                        currentTransportationMode = mostLikelyActivityType;
+                        newActivityRecognitionFrequency = -1;
+                    }
+                    if(newActivityRecognitionFrequency != activityRecognitionFrequency && newActivityRecognitionFrequency >= 0){
+                        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                                mGoogleApiClient,
+                                getActivityDetectionPendingIntent());
+
+                        activityRecognitionFrequency = newActivityRecognitionFrequency;
+                        Log.i(LOG_TAG, "Changing activity Frequency: " + activityRecognitionFrequency);
+                        ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                                mGoogleApiClient,
+                                activityRecognitionFrequency,
+                                getActivityDetectionPendingIntent());
+                    }
+                }
             }
         }
     };
@@ -329,10 +429,10 @@ public class ParkingDetectionService extends Service implements
                 final int state = intent.getIntExtra(BluetoothAdapter.EXTRA_STATE, BluetoothAdapter.ERROR);
                 switch (state) {
                     case BluetoothAdapter.STATE_OFF:
-                        toastMessage("Bluetooth was disabled. Stopping parking detector");
+                        toastMessage("Bluetooth was disabled");
                         break;
                     case BluetoothAdapter.STATE_ON:
-                        toastMessage("Bluetooth was enabled. Starting parking detector");
+                        toastMessage("Bluetooth was enabled");
                         break;
                 }
             }
@@ -378,6 +478,23 @@ public class ParkingDetectionService extends Service implements
                 //Get location
                 if (ContextCompat.checkSelfPermission(context.getApplicationContext(), Manifest.permission.ACCESS_FINE_LOCATION)
                         == PackageManager.PERMISSION_GRANTED) {
+
+                    if(isVerified){
+                        //Do nothing
+                    }
+                    else if(!curAudioPort.equals("No Valid Port") && askedForConformationCount < askedForConformationMax) {
+                        askedForConformationCount += 1;
+                        SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+                        SharedPreferences.Editor editor=mPrefs.edit();
+                        editor.putInt("askedForConformationCount", askedForConformationCount);
+                        editor.commit();
+                        if(pd != null){
+                            pd.confirmBluetoothDialog();
+                        }
+                    }else if(askedForConformationCount < askedForConformationMax){
+                        Log.d(LOG_TAG,"Max conformation count reached, no dialog");
+                    }
+
                     mLocationRequest = LocationRequest.create()
                             .setPriority(LocationRequest.PRIORITY_HIGH_ACCURACY)
                             .setNumUpdates(1)
@@ -386,15 +503,15 @@ public class ParkingDetectionService extends Service implements
                     LocationServices.FusedLocationApi.requestLocationUpdates(
                             mGoogleApiClient, mLocationRequest, new LocationClientListener(eventCode));
 
-                    Log.d(LOG_TAG, "Remove updates - 1");
-
                     ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                             mGoogleApiClient,
                             getActivityDetectionPendingIntent());
 
+                    activityRecognitionFrequency = 1000;
+                    Log.i(LOG_TAG, "Changing activity Frequency: " + activityRecognitionFrequency);
                     ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
                             mGoogleApiClient,
-                            3000,
+                            activityRecognitionFrequency,
                             getActivityDetectionPendingIntent());
 
                     activityCounter = 0;
@@ -419,15 +536,12 @@ public class ParkingDetectionService extends Service implements
                 }
                 if (pendingBTDetection.eventCode() == Constants.OUTCOME_UNPARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
                     toastMessage("Waiting for vehicle to begin driving: " + cd + activityString);
-                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && !isVerified && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode != DetectedActivity.IN_VEHICLE && currentTransportationMode != DetectedActivity.IN_VEHICLE) {
+                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode == DetectedActivity.IN_VEHICLE) {
+                    toastMessage("Waiting for vehicle to stop: " + cd + activityString);
+                }else if (!isVerified && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && prevTransportationMode != DetectedActivity.IN_VEHICLE){
                     toastMessage("No previous driving. Parking not detected");
                     pendingBTDetection = null;
                     return;
-                }else if (pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING && currentTransportationMode == DetectedActivity.IN_VEHICLE) {
-                    toastMessage("Waiting for vehicle to stop: " + cd + activityString);
-                }
-                if(cd < 10){
-                    cdTimeOut = cd*100;
                 }
             }else{
                 if(mostLikelyActivity != null && pendingBTDetection.eventCode() == Constants.OUTCOME_PARKING){
@@ -439,6 +553,17 @@ public class ParkingDetectionService extends Service implements
                 ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                         mGoogleApiClient,
                         getActivityDetectionPendingIntent());
+                if(!isVerified){
+
+                    activityRecognitionFrequency = 5*60000; //Check every 5 minutes, does not use sensors
+                    Log.i(LOG_TAG, "Changing activity Frequency: " + activityRecognitionFrequency);
+                    ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                            mGoogleApiClient,
+                            activityRecognitionFrequency,
+                            getActivityDetectionPendingIntent());
+                }else{
+                    Log.i(LOG_TAG, "Stopping activity updates");
+                }
                 return;
             }
             new android.os.Handler().postDelayed(
@@ -467,21 +592,6 @@ public class ParkingDetectionService extends Service implements
             }
             pendingBTDetection = new BTPendingDetection(eventCode, location);
             countdown();
-            if(isVerified){
-                //Do nothing
-            }
-            else if(!curAudioPort.equals("No Valid Port") && askedForConformationCount < askedForConformationMax) {
-                askedForConformationCount += 1;
-                SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
-                SharedPreferences.Editor editor=mPrefs.edit();
-                editor.putInt("askedForConformationCount", askedForConformationCount);
-                editor.commit();
-                if(pd != null){
-                    pd.confirmBluetoothDialog();
-                }
-            }else if(askedForConformationCount < askedForConformationMax){
-                Log.d(LOG_TAG,"Max conformation count reached, no dialog");
-            }
         }
     }
 
@@ -491,17 +601,17 @@ public class ParkingDetectionService extends Service implements
             Log.d(LOG_TAG, "In unparking");
             if (currentTransportationMode == DetectedActivity.IN_VEHICLE && (prevTransportationMode != DetectedActivity.UNKNOWN || isVerified)) {
                 //Looks like we've got an open spot!!!
-                actionsOnBTDetection(eventCode, location, null);
+                actionsOnValidatedParking(eventCode, location, null);
             }
         }else{
             Log.d(LOG_TAG, "In parking");
             if ((currentTransportationMode == DetectedActivity.ON_FOOT ||currentTransportationMode == DetectedActivity.STILL ) && (prevTransportationMode != DetectedActivity.UNKNOWN || isVerified)) {
-                actionsOnBTDetection(eventCode, location, null);
+                actionsOnValidatedParking(eventCode, location, null);
             }
         }
     }
 
-    private void actionsOnBTDetection(int eventCode, Location location, String address){
+    private void actionsOnValidatedParking(int eventCode, Location location, String address){
         if(pendingBTDetection != null) {
             pendingBTDetection = null;
             long curTime = System.currentTimeMillis() / 1000;
@@ -511,13 +621,26 @@ public class ParkingDetectionService extends Service implements
             ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
                     mGoogleApiClient,
                     getActivityDetectionPendingIntent());
+
+            if(!isVerified){
+
+                activityRecognitionFrequency = 5*60000;
+                Log.i(LOG_TAG, "Changing activity Frequency: " + activityRecognitionFrequency);
+                ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                        mGoogleApiClient,
+                        activityRecognitionFrequency,
+                        getActivityDetectionPendingIntent());
+            }else{
+                Log.i(LOG_TAG, "Stopping activity updates");
+            }
             if (eventCode == Constants.OUTCOME_PARKING) {
                 parkingDetected(location,"BT disconnect");
             } else {
                 deparkingDetected(location, "BT connect");
             }
         }
-    };
+    }
+
     public static void parkingDetected(Location location, String initiatedBy){
         toastMessage("Parking detected");
         saveLastPark(location);
@@ -529,6 +652,7 @@ public class ParkingDetectionService extends Service implements
             pd.parkedEvent(location);
         }
     }
+
     public static void deparkingDetected(Location location, String initiatedBy){
         toastMessage("New space detected");
         clearLastPark();
@@ -580,11 +704,19 @@ public class ParkingDetectionService extends Service implements
             settings.put("isBTVerified",isVerified);
             settings.put("verifiedBT", bluetoothTarget);
             settings.put("curAudioPort",curAudioPort);
+            settings.put("firstTime",firstTime);
             settings.put("geofences",geofences);
             if(lastParkLat != -9999) {
                 settings.put("lastParkLat", lastParkLat);
                 settings.put("lastParkLng",lastParkLng);
                 settings.put("lastParkDate",lastParkDate);
+            }
+            if(firstTime){
+                SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
+                SharedPreferences.Editor editor = mPrefs.edit();
+                firstTime = false;
+                editor.putBoolean("firstTime", firstTime);
+                editor.commit();
             }
         }
         catch (JSONException e) {
@@ -593,22 +725,44 @@ public class ParkingDetectionService extends Service implements
         return settings;
     }
 
-    public static void disableParkingDetector(){
+    public void disableParkingDetector(){
         isPDEnabled = false;
         pendingBTDetection = null;
+        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                mGoogleApiClient,
+                getActivityDetectionPendingIntent());
+        Log.i(LOG_TAG, "Stopping activity updates");
+
         SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = mPrefs.edit();
         editor.putBoolean("isPDEnabled", isPDEnabled);
         editor.commit();
 
     }
-    public static void enableParkingDetector(){
+    public void enableParkingDetector(){
         isPDEnabled = true;
         SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(context);
         SharedPreferences.Editor editor = mPrefs.edit();
         editor.putBoolean("isPDEnabled", isPDEnabled);
         editor.commit();
+        if(!isVerified){
+            new android.os.Handler().postDelayed(
+                    new Runnable() {
+                        public void run() {
+                            ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                                    mGoogleApiClient,
+                                    getActivityDetectionPendingIntent());
 
+                            activityRecognitionFrequency = 10000; //
+                            Log.i(LOG_TAG, "Starting Activity Updates at Frequency: " + activityRecognitionFrequency);
+                            ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                                    mGoogleApiClient,
+                                    activityRecognitionFrequency,
+                                    getActivityDetectionPendingIntent());
+                        }
+                    },
+                    5000);
+        }
     }
     public static void confirmAudioPort(){
         isVerified = true;
@@ -619,7 +773,7 @@ public class ParkingDetectionService extends Service implements
         editor.putBoolean("isVerified", isVerified);
         editor.commit();
     }
-    public static void resetBluetooth(){
+    public void resetBluetooth(){
         askedForConformationCount = 0;
         isVerified = false;
         bluetoothTarget = "";
@@ -632,6 +786,22 @@ public class ParkingDetectionService extends Service implements
         editor.putString("bluetoothTarget", bluetoothTarget);
         editor.putBoolean("isVerified", isVerified);
         editor.commit();
+        new android.os.Handler().postDelayed(
+                new Runnable() {
+                    public void run() {
+                        ActivityRecognition.ActivityRecognitionApi.removeActivityUpdates(
+                                mGoogleApiClient,
+                                getActivityDetectionPendingIntent());
+
+                        activityRecognitionFrequency = 10000; //
+                        Log.i(LOG_TAG, "Starting Activity Updates at Frequency: " + activityRecognitionFrequency);
+                        ActivityRecognition.ActivityRecognitionApi.requestActivityUpdates(
+                                mGoogleApiClient,
+                                activityRecognitionFrequency,
+                                getActivityDetectionPendingIntent());
+                    }
+                },
+                5000);
     }
 
     public static void saveLastPark(Location loc) {

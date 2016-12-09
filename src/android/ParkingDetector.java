@@ -36,6 +36,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     private static ParkingDetectionService mParkingDetectionService;
     private static final String LOG_TAG = "SS Parking Detector";
     private static boolean mBound = false;
+    private static CallbackContext pendingCallbackContext;
     Intent parkingDetectionIntent;
 
     @Override
@@ -56,19 +57,18 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
     @Override
     public boolean execute(String action, JSONArray args, CallbackContext callbackContext) throws JSONException {
         if(action.equals("initPlugin")) {
-            SharedPreferences mPrefs = PreferenceManager.getDefaultSharedPreferences(cordova.getActivity());
-            SharedPreferences.Editor editor = mPrefs.edit();
             ParkingDetectionService.showMessages = args.getString(0);
             ParkingDetectionService.askedForConformationMax = args.getInt(1);
             ParkingDetectionService.endpoint = args.getString(2);
             if(!mBound){
                 cordova.getActivity().startService(parkingDetectionIntent);
                 mBound = cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
+                pendingCallbackContext = callbackContext;
+            }else{
+                JSONObject result = ParkingDetectionService.buildSettingsJSON();
+                callbackContext.success(result);
+                return true;
             }
-            JSONObject result = ParkingDetectionService.buildSettingsJSON();
-            callbackContext.success(result);
-            return true;
-
         }else if(action.equals("userInitiatedPark")) {
             double userLat = args.getDouble(0);
             double userLng = args.getDouble(1);
@@ -86,7 +86,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             ParkingDetectionService.deparkingDetected(location, "user");
 
         }else if(action.equals("resetBluetooth")) {
-            ParkingDetectionService.resetBluetooth();
+            mParkingDetectionService.resetBluetooth();
             callbackContext.success();
             return true;
 
@@ -101,7 +101,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             return true;
 
         }else if(action.equals("disableParkingDetector")) {
-            ParkingDetectionService.disableParkingDetector();
+            mParkingDetectionService.disableParkingDetector();
             if(mBound){
                 mBound = false;
                 mParkingDetectionService.unregisterClient();
@@ -111,7 +111,7 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             return true;
 
         }else if(action.equals("enableParkingDetector")) {
-            ParkingDetectionService.enableParkingDetector();
+            mParkingDetectionService.enableParkingDetector();
             if(!mBound){
                 cordova.getActivity().startService(parkingDetectionIntent);
                 mBound = cordova.getActivity().bindService(parkingDetectionIntent, mConnection, Context.BIND_AUTO_CREATE);
@@ -130,8 +130,10 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             JSONObject result = ParkingDetectionService.buildSettingsJSON();
             callbackContext.success(result);
             return true;
+        }else{
+            return false;
         }
-        return false;
+        return true;
     }
 
     /* Callbacks for ParkingDetectionService */
@@ -144,11 +146,16 @@ public class ParkingDetector extends CordovaPlugin implements ParkingDetectionSe
             Log.d(LOG_TAG, "Connected to Parking Detection Service");
             // We've bound to LocalService, cast the IBinder and get LocalService instance
             ParkingDetectionService.LocalBinder binder = (ParkingDetectionService.LocalBinder) service;
-            mParkingDetectionService  = binder.getService();
+            mParkingDetectionService = binder.getService();
             mParkingDetectionService.registerClient(ParkingDetector.this);
             //Start parking detector
             mParkingDetectionService.startParkingDetector();
             mBound = true;
+            if(pendingCallbackContext != null){
+                JSONObject result = mParkingDetectionService.buildSettingsJSON();
+                pendingCallbackContext.success(result);
+                pendingCallbackContext = null;
+            }
         }
 
         @Override
