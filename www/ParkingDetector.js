@@ -6,6 +6,7 @@ var defaultEndpoint = "http://streetsmartdemo.cloudapp.net/newParkingActivity";
 window.parkingDetector = {
     parkedCallback: function(data){},
     deparkedCallback: function(data){},
+    settingsChangedCallback: function(data){},
     messageReceiver: function(data){},
     initParkingDetectorPlugin: function(showMessages, maxPrompts, endpoint, success, error) {
         if(typeof showMessages == "undefined"){
@@ -55,6 +56,14 @@ window.parkingDetector = {
     setDeparkedCallback: function(newCB){
         if(typeof newCB === "function"){
             this.deparkedCallback = newCB;
+        }else{
+            console.log("Cannot set callback", newCB, "Is not a function");
+        }
+    },
+
+    setSettingsChangedCallback: function(newCB){
+        if(typeof newCB === "function"){
+            this.settingsChangedCallback = newCB;
         }else{
             console.log("Cannot set callback", newCB, "Is not a function");
         }

@@ -10,9 +10,8 @@
 #import "ParkingDetectorService.h"
 
 @interface ParkingDetector : CDVPlugin {
-    //DT NOTE: Maybe use property instead? Think the additional overhead is insignificant
     ParkingDetectorService *parkingDetectorService;
-    UIView* webView;
+    UIView *webView;
 }
 
 - (void)initPlugin:(CDVInvokedUrlCommand*)command;
@@ -24,9 +23,15 @@
 - (void)disableParkingDetector:(CDVInvokedUrlCommand*)command;
 - (void)enableParkingDetector:(CDVInvokedUrlCommand*)command;
 - (void)getDetectorStatus:(CDVInvokedUrlCommand*)command;
+
+- (void)onResume:(NSNotification *)notification;
+- (void)onPause:(NSNotification *)notification;
+- (void)onClose:(NSNotification *)notification;
+- (void)onFinishLaunching:(NSNotification *)notification;
 - (void)sendMessage:(NSNotification*)notification;
 - (void)showBTAlertBox:(NSNotification*)notification;
 - (void)parkedEvent:(NSNotification*)notification;
 - (void)deparkedEvent:(NSNotification*)notification;
+- (void)settingsChangeEvent:(NSNotification*)notification;
 
 @end
